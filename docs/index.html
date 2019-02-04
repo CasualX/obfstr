@@ -1,0 +1,54 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>String Obfuscator</title>
+  <script>
+function utf8_encode(s) {
+  return unescape(encodeURIComponent(s));
+}
+function utf8_decode(s) {
+  return decodeURIComponent(escape(s));
+}
+function next_round(x) {
+  x = (x ^ (x << 13) >>> 0) >>> 0;
+  x = (x ^ (x >>> 17) >>> 0) >>> 0;
+  x = (x ^ (x << 5) >>> 0) >>> 0;
+  return x;
+};
+function obfstr(text, key, wide) {
+  let result = "obfstr::obfstr!(" + (wide ? "L": "") + "/*" + text.replace(/(?:\r|\n|\t)/g, "") + "*/ " + key;
+  let s = wide ? text : utf8_encode(text);
+  let mask = wide ? 0xffff : 0xff;
+  for (let i = 0; i < s.length; ++i) {
+    key = next_round(key);
+    let x = ((s.charCodeAt(i) & mask) - (key & mask)) & mask;
+    result += "," + x;
+  }
+  return result + ")";
+}
+function oninput() {
+  let key = crypto.getRandomValues(new Uint32Array(1))[0];
+  let text = document.getElementById('input').value;
+  let wide = document.getElementById('wide').checked;
+  let result = obfstr(text, key, wide);
+  document.getElementById('output').textContent = result;
+}
+  </script>
+</head>
+
+<body>
+  <h1>String Obfuscator</h1>
+  <p>Enter any text and copy the result in your code, <a href="https://github.com/CasualX/obfstr">powered by obfstr</a>.</p>
+  <textarea id="input" rows="1" cols="80" style="resize:vertical;">Hello 🌍</textarea>
+  <input id="wide" type="checkbox">
+  <pre id="output" style="word-wrap:break-word;"></pre>
+</body>
+
+<script>
+  document.getElementById('input').addEventListener('input', oninput);
+  document.getElementById('wide').addEventListener('change', oninput);
+  oninput();
+</script>
+</html>
