@@ -1,0 +1,13 @@
+[package]
+name = "obfstr-impl"
+version = "0.1.0"
+edition = "2018"
+authors = ["Casper <CasualX@users.noreply.github.com>"]
+license = "MIT"
+
+[dependencies]
+proc-macro-hack = "0.5"
+rand = "0.6"
+
+[lib]
+proc-macro = true

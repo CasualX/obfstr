@@ -1,71 +1,94 @@
 /*!
-String Obfuscation
-==================
-
-Enter any text and copy the result in your code.
-
-<div>
-<textarea id="input" rows="1" cols="80" style="resize:vertical;">Hello 🌍</textarea>
-<input id="wide" type="checkbox">
-<pre id="output" style="word-wrap:break-word;"></pre>
-<script>
-function utf8_encode(s) {
-  return unescape(encodeURIComponent(s));
-}
-function next_round(x) {
-  x = (x ^ (x << 13) >>> 0) >>> 0;
-  x = (x ^ (x >>> 17) >>> 0) >>> 0;
-  x = (x ^ (x << 5) >>> 0) >>> 0;
-  return x;
-};
-function obfstr(text, key, wide) {
-  let result = "obfstr::obfstr!(" + (wide ? "L" : "") + "/*" + text.replace(/(?:\r|\n|\t)/g, "") + "*/ " + key;
-  let s = wide ? text : utf8_encode(text);
-  let mask = wide ? 0xffff : 0xff;
-  for (let i = 0; i < s.length; ++i) {
-    key = next_round(key);
-    let x = ((s.charCodeAt(i) & mask) - (key & mask)) & mask;
-    result += "," + x;
-  }
-  return result + ")";
-}
-function oninput() {
-  let key = crypto.getRandomValues(new Uint32Array(1))[0];
-  let text = document.getElementById('input').value;
-  let wide = document.getElementById('wide').checked;
-  let result = obfstr(text, key, wide);
-  document.getElementById('output').textContent = result;
-}
-document.getElementById('input').addEventListener('input', oninput);
-document.getElementById('wide').addEventListener('change', oninput);
-oninput();
-</script>
-</div>
-
-Paste the generated code in your source.
-
-```
-let s = obfstr::obfstr!(/*Hello 🌍*/ 2803150042,11,63,105,38,140,200,70,29,83,200);
-assert_eq!(s.as_str(), "Hello 🌍");
-```
+Compiletime string literal obfuscation.
 !*/
 
 #![no_std]
 #![feature(fixed_size_array)]
 
-use core::{fmt, mem, ops, slice, str};
+// WTF is this?! How do I fix it?!
+#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
+
+use core::{char, fmt, mem, ops, slice, str};
 use core::array::FixedSizeArray;
 
-/// Pretty syntax.
+/// Compiletime string literal obfuscation.
+///
+/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
+///
+/// The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
+///
+/// ```
+/// assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
+/// ```
+///
+/// The `local` modifier returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
+///
+/// ```
+/// let str_buf = obfstr::obfstr!(local "Hello 🌍");
+/// assert_eq!(str_buf.as_str(), "Hello 🌍");
+/// ```
+///
+/// The `const` modifier returns the encrypted `ObfString` for use in constant expressions:
+///
+/// ```
+/// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
+/// assert_eq!(GSTR.decrypt().as_str(), "Hello 🌍");
+/// ```
 #[macro_export]
 macro_rules! obfstr {
-	($key:literal $(,$byte:literal)*) => {
-		(&$crate::StrDesc { key: $key, data: [$($byte),*] }).decrypt()
+	($string:literal) => {
+		(&$crate::obfstr_impl!($string)).decrypt().as_str()
 	};
-	(L $key:literal $(,$word:literal)*) => {
-		(&$crate::WStrDesc { key: $key, data: [$($word),*] }).decrypt()
+	(local $string:literal) => {
+		(&$crate::obfstr_impl!($string)).decrypt()
+	};
+	(const $string:literal) => {
+		$crate::obfstr_impl!($string)
+	};
+	// Support wide strings...
+	(L$string:literal) => {
+		(&$crate::obfstr_impl!(L$string)).decrypt().as_wide()
+	};
+	(local L$string:literal) => {
+		(&$crate::obfstr_impl!(L$string)).decrypt()
+	};
+	(const L$string:literal) => {
+		$crate::obfstr_impl!(L$string)
 	};
 }
+
+/// Compiletime string obfuscation for serde.
+///
+/// Serde unhelpfully requires `&'static str` literals in various places.
+/// To work around these limitations an unsafe macro is provided which unsafely returns a static string slice.
+/// This is probably fine as long as the underlying serializer doesn't rely on the staticness of the string slice.
+#[cfg(feature = "unsafe_static_str")]
+#[macro_export]
+macro_rules! unsafe_obfstr {
+	($string:literal) => {
+		(&$crate::obfstr_impl!($string)).decrypt().unsafe_as_static_str()
+	};
+}
+
+#[doc(hidden)]
+#[proc_macro_hack::proc_macro_hack]
+pub use obfstr_impl::obfstr_impl;
+
+/// Compiletime random number generator.
+///
+/// Every time the code is compiled, a new random number literal is generated.
+/// Recompilation (and thus regeneration of the number) is not triggered automatically.
+///
+/// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
+///
+/// ```
+/// let r = obfstr::random!(u8);
+/// assert!((r as i32) >= 0 && (r as i32) <= 255);
+/// ```
+#[proc_macro_hack::proc_macro_hack]
+pub use obfstr_impl::random_impl as random;
+
+//----------------------------------------------------------------
 
 fn next_round(mut x: u32) -> u32 {
 	x ^= x << 13;
@@ -74,21 +97,27 @@ fn next_round(mut x: u32) -> u32 {
 	x
 }
 
+const XREF_SHIFT: usize = ((random!(u8) & 31) + 32) as usize;
+
 //----------------------------------------------------------------
 // String implementation
 
+/// Obfuscated string constant data.
+///
+/// This type represents the data baked in the binary and holds the key and obfuscated string.
 #[repr(C)]
-pub struct StrDesc<A> {
+pub struct ObfString<A> {
 	pub key: u32,
 	pub data: A,
 }
-impl<A: FixedSizeArray<u8>> StrDesc<A> {
+impl<A: FixedSizeArray<u8>> ObfString<A> {
+	/// Decrypts the obfuscated string and returns the buffer.
 	#[inline(always)]
-	pub fn decrypt(&self) -> StrBuf<A> {
+	pub fn decrypt(&self) -> ObfBuffer<A> {
 		unsafe {
-			let mut buffer = StrBuf::<A>::uninit();
+			let mut buffer = ObfBuffer::<A>::uninit();
 			let data = self.data.as_slice();
-			let src = data.as_ptr() as usize - data.len() * 33;
+			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			decryptbuf(buffer.0.as_mut_slice(), src);
 			buffer
 		}
@@ -96,17 +125,20 @@ impl<A: FixedSizeArray<u8>> StrDesc<A> {
 }
 #[inline(never)]
 unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
-	let mut key = *((src + dest.len() * 33 - 4) as *const u32);
-	let data = slice::from_raw_parts((src + dest.len() * 33) as *const u8, dest.len());
+	let mut key = *((src + dest.len() * XREF_SHIFT - 4) as *const u32);
+	let data = slice::from_raw_parts((src + dest.len() * XREF_SHIFT) as *const u8, dest.len());
 	for i in 0..data.len() {
 		key = next_round(key);
 		dest[i] = data[i].wrapping_add(key as u8);
 	}
 }
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// Obfuscated string buffer.
+///
+/// This type represents the string buffer after decryption on the stack.
+#[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct StrBuf<A>(A);
-impl<A: FixedSizeArray<u8>> StrBuf<A> {
+pub struct ObfBuffer<A>(A);
+impl<A: FixedSizeArray<u8>> ObfBuffer<A> {
 	unsafe fn uninit() -> Self {
 		mem::uninitialized()
 	}
@@ -118,24 +150,25 @@ impl<A: FixedSizeArray<u8>> StrBuf<A> {
 		return unsafe { str::from_utf8_unchecked(self.0.as_slice()) };
 	}
 	// For use with serde's stupid 'static limitations...
+	#[cfg(feature = "unsafe_static_str")]
 	#[inline]
 	pub fn unsafe_as_static_str(&self) -> &'static str {
 		unsafe { &*(self.as_str() as *const _) }
 	}
 }
-impl<A: FixedSizeArray<u8>> ops::Deref for StrBuf<A> {
+impl<A: FixedSizeArray<u8>> ops::Deref for ObfBuffer<A> {
 	type Target = str;
 	#[inline]
 	fn deref(&self) -> &str {
 		self.as_str()
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Debug for StrBuf<A> {
+impl<A: FixedSizeArray<u8>> fmt::Debug for ObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.as_str().fmt(f)
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Display for StrBuf<A> {
+impl<A: FixedSizeArray<u8>> fmt::Display for ObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.as_str().fmt(f)
 	}
@@ -144,18 +177,21 @@ impl<A: FixedSizeArray<u8>> fmt::Display for StrBuf<A> {
 //----------------------------------------------------------------
 // Widestr implementation
 
+/// Obfuscated wide string constant data.
+///
+/// This type represents the data baked in the binary and holds the key and obfuscated wide string.
 #[repr(C)]
-pub struct WStrDesc<A> {
+pub struct WObfString<A> {
 	pub key: u32,
 	pub data: A,
 }
-impl<A: FixedSizeArray<u16>> WStrDesc<A> {
+impl<A: FixedSizeArray<u16>> WObfString<A> {
 	#[inline(always)]
-	pub fn decrypt(&self) -> WStrBuf<A> {
+	pub fn decrypt(&self) -> WObfBuffer<A> {
 		unsafe {
-			let mut buffer = WStrBuf::<A>::uninit();
+			let mut buffer = WObfBuffer::<A>::uninit();
 			let data = self.data.as_slice();
-			let src = data.as_ptr() as usize - data.len() * 33;
+			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			wdecryptbuf(buffer.0.as_mut_slice(), src);
 			buffer
 		}
@@ -163,17 +199,20 @@ impl<A: FixedSizeArray<u16>> WStrDesc<A> {
 }
 #[inline(never)]
 unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
-	let mut key = *((src + dest.len() * 33 - 4) as *const u32);
-	let data = slice::from_raw_parts((src + dest.len() * 33) as *const u16, dest.len());
+	let mut key = *((src + dest.len() * XREF_SHIFT - 4) as *const u32);
+	let data = slice::from_raw_parts((src + dest.len() * XREF_SHIFT) as *const u16, dest.len());
 	for i in 0..data.len() {
 		key = next_round(key);
 		dest[i] = data[i].wrapping_add(key as u16);
 	}
 }
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+/// Obfuscated wide string buffer.
+///
+/// This type represents the wide string buffer after decryption on the stack.
+#[derive(Copy, Clone)]
 #[repr(transparent)]
-pub struct WStrBuf<A>(A);
-impl<A: FixedSizeArray<u16>> WStrBuf<A> {
+pub struct WObfBuffer<A>(A);
+impl<A: FixedSizeArray<u16>> WObfBuffer<A> {
 	unsafe fn uninit() -> Self {
 		mem::uninitialized()
 	}
@@ -182,26 +221,29 @@ impl<A: FixedSizeArray<u16>> WStrBuf<A> {
 		self.0.as_slice()
 	}
 }
-impl<A: FixedSizeArray<u16>> ops::Deref for WStrBuf<A> {
+impl<A: FixedSizeArray<u16>> ops::Deref for WObfBuffer<A> {
 	type Target = [u16];
 	#[inline]
 	fn deref(&self) -> &[u16] {
 		self.as_wide()
 	}
 }
-impl<A: FixedSizeArray<u16>> fmt::Debug for WStrBuf<A> {
+impl<A: FixedSizeArray<u16>> fmt::Debug for WObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		self.as_wide().fmt(f)
+		use fmt::Write;
+		f.write_str("\"")?;
+		for chr in char::decode_utf16(self.as_wide().iter().cloned()) {
+			f.write_char(chr.unwrap_or(char::REPLACEMENT_CHARACTER))?;
+		}
+		f.write_str("\"")
 	}
 }
-
-//----------------------------------------------------------------
-
-#[test]
-fn foo() {
-	let s = obfstr!(/*abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz*/3154653501,247,
-	107,175,19,79,255,115,150,24,33,255,94,48,145,245,128,60,147,110,111,59,51,101,
-	56,75,206,48,97,40,136,132,234,108,129,58,112,55,159,187,140,146,140,204,123,93,
-	22,35,25,154,193,20,76);
-	assert_eq!(s.as_str(), "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz");
+impl<A: FixedSizeArray<u16>> fmt::Display for WObfBuffer<A> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		use fmt::Write;
+		for chr in char::decode_utf16(self.as_wide().iter().cloned()) {
+			f.write_char(chr.unwrap_or(char::REPLACEMENT_CHARACTER))?;
+		}
+		Ok(())
+	}
 }

@@ -2,3 +2,22 @@
 name = "obfstr"
 version = "0.1.0"
 edition = "2018"
+authors = ["Casper <CasualX@users.noreply.github.com>"]
+license = "MIT"
+description = "Compiletime string literal obfuscation for Rust"
+documentation = "https://docs.rs/obfstr"
+repository = "https://github.com/CasualX/obfstr"
+readme = "readme.md"
+keywords = ["str", "string", "literal", "obfuscation", "encryption"]
+categories = ["no-std"]
+
+[features]
+# Enables static lifetime hack for serde
+unsafe_static_str = []
+
+[dependencies]
+proc-macro-hack = "0.5"
+obfstr-impl = { path = "impl", version = "0.1.0" }
+
+[workspace]
+members = [".", "impl"]

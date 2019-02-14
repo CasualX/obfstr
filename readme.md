@@ -1,16 +1,36 @@
 String Obfuscation
 ==================
 
-Simple string obfuscation for Rust.
+Compiletime string literal obfuscation for Rust.
 
 Examples
 --------
 
-Visit [this page](https://casualhacks.net/obfstr/index.html) to generate your obfuscated strings.
+The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
 
 ```rust
-let s = obfstr::obfstr!(/*Hello 🌍*/ 2803150042,11,63,105,38,140,200,70,29,83,200);
-assert_eq!(s.as_str(), "Hello 🌍");
+assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
+```
+
+The `local` modifier returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
+
+```rust
+let str_buf = obfstr::obfstr!(local "Hello 🌍");
+assert_eq!(str_buf.as_str(), "Hello 🌍");
+```
+
+The `const` modifier returns the encrypted `ObfString` for use in constant expressions:
+
+```rust
+static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
+assert_eq!(GSTR.decrypt().as_str(), "Hello 🌍");
+```
+
+We're already depending on `rand`, why not throw in a compiletime random number generator:
+
+```rust
+let r = obfstr::random!(u8);
+assert!((r as i32) >= 0 && (r as i32) <= 255);
 ```
 
 License
