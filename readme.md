@@ -23,7 +23,7 @@ The `const` modifier returns the encrypted `ObfString` for use in constant expre
 
 ```rust
 static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
-assert_eq!(GSTR.decrypt().as_str(), "Hello 🌍");
+assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
 ```
 
 We're already depending on `rand`, why not throw in a compiletime random number generator:

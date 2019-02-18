@@ -8,7 +8,7 @@ Compiletime string literal obfuscation.
 // WTF is this?! How do I fix it?!
 #![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
 
-use core::{char, fmt, mem, ops, slice, str};
+use core::{char, fmt, mem, ops, ptr, slice, str};
 use core::array::FixedSizeArray;
 
 /// Compiletime string literal obfuscation.
@@ -32,25 +32,25 @@ use core::array::FixedSizeArray;
 ///
 /// ```
 /// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
-/// assert_eq!(GSTR.decrypt().as_str(), "Hello 🌍");
+/// assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
 /// ```
 #[macro_export]
 macro_rules! obfstr {
 	($string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt().as_str()
+		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096).as_str()
 	};
 	(local $string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt()
+		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096)
 	};
 	(const $string:literal) => {
 		$crate::obfstr_impl!($string)
 	};
 	// Support wide strings...
 	(L$string:literal) => {
-		(&$crate::obfstr_impl!(L$string)).decrypt().as_wide()
+		(&$crate::obfstr_impl!(L$string)).decrypt($crate::random!(usize) % 4096).as_wide()
 	};
 	(local L$string:literal) => {
-		(&$crate::obfstr_impl!(L$string)).decrypt()
+		(&$crate::obfstr_impl!(L$string)).decrypt($crate::random!(usize) % 4096)
 	};
 	(const L$string:literal) => {
 		$crate::obfstr_impl!(L$string)
@@ -66,7 +66,7 @@ macro_rules! obfstr {
 #[macro_export]
 macro_rules! unsafe_obfstr {
 	($string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt().unsafe_as_static_str()
+		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096).unsafe_as_static_str()
 	};
 }
 
@@ -113,12 +113,13 @@ pub struct ObfString<A> {
 impl<A: FixedSizeArray<u8>> ObfString<A> {
 	/// Decrypts the obfuscated string and returns the buffer.
 	#[inline(always)]
-	pub fn decrypt(&self) -> ObfBuffer<A> {
+	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
 		unsafe {
 			let mut buffer = ObfBuffer::<A>::uninit();
 			let data = self.data.as_slice();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
-			decryptbuf(buffer.0.as_mut_slice(), src);
+			let f: unsafe fn(&mut [u8], usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
+			f(buffer.0.as_mut_slice(), src);
 			buffer
 		}
 	}
@@ -187,12 +188,13 @@ pub struct WObfString<A> {
 }
 impl<A: FixedSizeArray<u16>> WObfString<A> {
 	#[inline(always)]
-	pub fn decrypt(&self) -> WObfBuffer<A> {
+	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
 		unsafe {
 			let mut buffer = WObfBuffer::<A>::uninit();
 			let data = self.data.as_slice();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
-			wdecryptbuf(buffer.0.as_mut_slice(), src);
+			let f: unsafe fn(&mut [u16], usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
+			f(buffer.0.as_mut_slice(), src);
 			buffer
 		}
 	}
