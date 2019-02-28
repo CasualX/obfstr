@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2018"
 authors = ["Casper <CasualX@users.noreply.github.com>"]
 license = "MIT"
+description = "Procedural macro implementation for obfstr"
+repository = "https://github.com/CasualX/obfstr"
+readme = "readme.md"
 
 [dependencies]
 proc-macro-hack = "0.5"

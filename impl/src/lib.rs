@@ -68,7 +68,35 @@ fn obfstr_parse(input: Literal) -> String {
 				Some('\\') => '\\',
 				Some('\'') => '\'',
 				Some('\"') => '\"',
-				Some(chr) => panic!("invalid escape character: `{}`)", chr),
+				Some('u') => {
+					match chars.next() {
+						Some('{') => (),
+						Some(chr) => panic!("invalid unicode escape character: `{}`", chr),
+						None => panic!("invalid unicode escape at end of string"),
+					}
+					let mut u = 0;
+					loop {
+						match chars.next() {
+							Some(chr @ '0'...'9') => {
+								u = u * 16 + (chr as u32 - '0' as u32);
+							},
+							Some(chr @ 'a'...'f') => {
+								u = u * 16 + (chr as u32 - 'a' as u32) + 10;
+							},
+							Some(chr @ 'A'...'F') => {
+								u = u * 16 + (chr as u32 - 'A' as u32) + 10;
+							},
+							Some('}') => break,
+							Some(chr) => panic!("invalid unicode escape character: `{}`", chr),
+							None => panic!("invalid unicode escape at end of string"),
+						};
+					}
+					match std::char::from_u32(u) {
+						Some(chr) => chr,
+						None => panic!("invalid unicode escape character: `\\u{{{}}}`", u),
+					}
+				},
+				Some(chr) => panic!("invalid escape character: `{}`", chr),
 				None => panic!("invalid escape at end of string"),
 			}
 		}

@@ -17,7 +17,7 @@ unsafe_static_str = []
 
 [dependencies]
 proc-macro-hack = "0.5"
-obfstr-impl = { path = "impl", version = "0.1.0" }
+obfstr-impl = { path = "./impl", version = "0.1.0" }
 
 [workspace]
-members = [".", "impl"]
+members = [".", "./impl"]
