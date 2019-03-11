@@ -6,6 +6,13 @@ Compiletime string literal obfuscation for Rust.
 Examples
 --------
 
+Comes with a simple `wide!` macro to provide compile time utf16 string literals:
+
+```rust
+let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
+assert_eq!(obfstr::wide!("Wide"), expected);
+```
+
 The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
 
 ```rust
@@ -29,8 +36,8 @@ assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
 We're already depending on `rand`, why not throw in a compiletime random number generator:
 
 ```rust
-let r = obfstr::random!(u8);
-assert!((r as i32) >= 0 && (r as i32) <= 255);
+const RND: i32 = obfstr::random!(u8) as i32;
+assert!(RND >= 0 && RND <= 255);
 ```
 
 License

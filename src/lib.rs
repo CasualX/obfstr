@@ -74,6 +74,15 @@ macro_rules! unsafe_obfstr {
 #[proc_macro_hack::proc_macro_hack]
 pub use obfstr_impl::obfstr_impl;
 
+/// Wide string literal of type `&'static [u16; LEN]`.
+///
+/// ```
+/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
+/// assert_eq!(obfstr::wide!("Wide"), expected);
+/// ```
+#[proc_macro_hack::proc_macro_hack]
+pub use obfstr_impl::wide_impl as wide;
+
 /// Compiletime random number generator.
 ///
 /// Every time the code is compiled, a new random number literal is generated.
@@ -82,8 +91,8 @@ pub use obfstr_impl::obfstr_impl;
 /// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
 ///
 /// ```
-/// let r = obfstr::random!(u8);
-/// assert!((r as i32) >= 0 && (r as i32) <= 255);
+/// const RND: i32 = obfstr::random!(u8) as i32;
+/// assert!(RND >= 0 && RND <= 255);
 /// ```
 #[proc_macro_hack::proc_macro_hack]
 pub use obfstr_impl::random_impl as random;
