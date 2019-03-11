@@ -19,7 +19,7 @@ pub fn obfstr_impl(input: TokenStream) -> TokenStream {
 
 	// Followed by a string literal
 	let string = match token {
-		Some(TokenTree::Literal(lit)) => obfstr_parse(lit),
+		Some(TokenTree::Literal(lit)) => string_parse(lit),
 		Some(tt) => panic!("expected a string literal: `{}`", tt),
 		None => panic!("expected a string literal"),
 	};
@@ -44,7 +44,44 @@ pub fn obfstr_impl(input: TokenStream) -> TokenStream {
 	result.parse().unwrap()
 }
 
-fn obfstr_parse(input: Literal) -> String {
+fn next_round(mut x: u32) -> u32 {
+	x ^= x << 13;
+	x ^= x >> 17;
+	x ^= x << 5;
+	x
+}
+
+fn encrypt(bytes: &mut [u8], mut key: u32) -> String {
+	let mut result = format!("$crate::ObfString {{ key: {}, data: [", key);
+	for byte in bytes.iter_mut() {
+		key = next_round(key);
+		*byte = (*byte).wrapping_sub(key as u8);
+	}
+	for byte in bytes.iter() {
+		use std::fmt::Write;
+		let _ = write!(result, "{},", byte);
+	}
+	result.push_str("] }");
+	result
+}
+
+fn wencrypt(words: &mut [u16], mut key: u32) -> String {
+	let mut result = format!("$crate::WObfString {{ key: {}, data: [", key);
+	for word in words.iter_mut() {
+		key = next_round(key);
+		*word = (*word).wrapping_sub(key as u16);
+	}
+	for word in words.iter() {
+		use std::fmt::Write;
+		let _ = write!(result, "{},", word);
+	}
+	result.push_str("] }");
+	result
+}
+
+//----------------------------------------------------------------
+
+fn string_parse(input: Literal) -> String {
 	let string = input.to_string();
 	let mut bytes = string.as_bytes();
 
@@ -105,39 +142,32 @@ fn obfstr_parse(input: Literal) -> String {
 	unescaped
 }
 
-fn next_round(mut x: u32) -> u32 {
-	x ^= x << 13;
-	x ^= x >> 17;
-	x ^= x << 5;
-	x
-}
+//----------------------------------------------------------------
 
-fn encrypt(bytes: &mut [u8], mut key: u32) -> String {
-	let mut result = format!("$crate::ObfString {{ key: {}, data: [", key);
-	for byte in bytes.iter_mut() {
-		key = next_round(key);
-		*byte = (*byte).wrapping_sub(key as u8);
+#[proc_macro_hack]
+pub fn wide_impl(input: TokenStream) -> TokenStream {
+	// Parse the input as a single string literal
+	let mut iter = input.into_iter();
+	let string = match iter.next() {
+		Some(TokenTree::Literal(lit)) => string_parse(lit),
+		Some(tt) => panic!("expected a string literal: `{}`", tt),
+		None => panic!("expected a string literal"),
+	};
+	if let Some(tt) = iter.next() {
+		panic!("unexpected token: `{}`", tt);
 	}
-	for byte in bytes.iter() {
-		use std::fmt::Write;
-		let _ = write!(result, "{},", byte);
+	// Encode the string literal as an array of words
+	let mut array = Vec::new();
+	for word in string.encode_utf16() {
+		array.push(TokenTree::Literal(Literal::u16_suffixed(word)));
+		array.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
 	}
-	result.push_str("] }");
-	result
-}
-
-fn wencrypt(words: &mut [u16], mut key: u32) -> String {
-	let mut result = format!("$crate::WObfString {{ key: {}, data: [", key);
-	for word in words.iter_mut() {
-		key = next_round(key);
-		*word = (*word).wrapping_sub(key as u16);
-	}
-	for word in words.iter() {
-		use std::fmt::Write;
-		let _ = write!(result, "{},", word);
-	}
-	result.push_str("] }");
-	result
+	let elements = array.into_iter().collect();
+	// Wrap the array of words in a reference
+	vec![
+		TokenTree::Punct(Punct::new('&', Spacing::Alone)),
+		TokenTree::Group(Group::new(Delimiter::Bracket, elements)),
+	].into_iter().collect()
 }
 
 //----------------------------------------------------------------
