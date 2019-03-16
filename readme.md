@@ -19,17 +19,17 @@ The `obfstr!` macro returns a borrowed temporary and may not escape the statemen
 assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 ```
 
-The `local` modifier returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
+The `obflocal!` macro returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
 
 ```rust
-let str_buf = obfstr::obfstr!(local "Hello 🌍");
+let str_buf = obfstr::obflocal!("Hello 🌍");
 assert_eq!(str_buf.as_str(), "Hello 🌍");
 ```
 
-The `const` modifier returns the encrypted `ObfString` for use in constant expressions:
+The `obfconst!` macro returns the encrypted `ObfString` for use in constant expressions:
 
 ```rust
-static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
+static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
 assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
 ```
 

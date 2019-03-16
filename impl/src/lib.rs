@@ -1,10 +1,24 @@
 extern crate proc_macro;
-
 use proc_macro::*;
-use proc_macro_hack::proc_macro_hack;
 
-#[proc_macro_hack]
-pub fn obfstr_impl(input: TokenStream) -> TokenStream {
+//----------------------------------------------------------------
+
+#[proc_macro_attribute]
+pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
+	drop(args);
+	replace_macro(replace_macro(input, "_obfstr_", obfstr_impl), "_strlen_", strlen_impl)
+}
+
+fn strlen_impl(input: TokenStream) -> TokenStream {
+	if let Some(TokenTree::Literal(literal)) = input.into_iter().next() {
+		let s = string_parse(literal);
+		TokenStream::from(TokenTree::Literal(Literal::usize_suffixed(s.len())))
+	}
+	else {
+		panic!("expected a string literal")
+	}
+}
+fn obfstr_impl(input: TokenStream) -> TokenStream {
 	let mut tt = input.into_iter();
 	let mut token = tt.next();
 
@@ -52,7 +66,7 @@ fn next_round(mut x: u32) -> u32 {
 }
 
 fn encrypt(bytes: &mut [u8], mut key: u32) -> String {
-	let mut result = format!("$crate::ObfString {{ key: {}, data: [", key);
+	let mut result = format!("{}, [", key);
 	for byte in bytes.iter_mut() {
 		key = next_round(key);
 		*byte = (*byte).wrapping_sub(key as u8);
@@ -61,12 +75,12 @@ fn encrypt(bytes: &mut [u8], mut key: u32) -> String {
 		use std::fmt::Write;
 		let _ = write!(result, "{},", byte);
 	}
-	result.push_str("] }");
+	result.push_str("]");
 	result
 }
 
 fn wencrypt(words: &mut [u16], mut key: u32) -> String {
-	let mut result = format!("$crate::WObfString {{ key: {}, data: [", key);
+	let mut result = format!("{}, [", key);
 	for word in words.iter_mut() {
 		key = next_round(key);
 		*word = (*word).wrapping_sub(key as u16);
@@ -75,7 +89,7 @@ fn wencrypt(words: &mut [u16], mut key: u32) -> String {
 		use std::fmt::Write;
 		let _ = write!(result, "{},", word);
 	}
-	result.push_str("] }");
+	result.push_str("]");
 	result
 }
 
@@ -144,8 +158,13 @@ fn string_parse(input: Literal) -> String {
 
 //----------------------------------------------------------------
 
-#[proc_macro_hack]
-pub fn wide_impl(input: TokenStream) -> TokenStream {
+#[proc_macro_attribute]
+pub fn wide_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
+	drop(args);
+	replace_macro(input, "_wide_", wide_impl)
+}
+
+fn wide_impl(input: TokenStream) -> TokenStream {
 	// Parse the input as a single string literal
 	let mut iter = input.into_iter();
 	let string = match iter.next() {
@@ -172,8 +191,13 @@ pub fn wide_impl(input: TokenStream) -> TokenStream {
 
 //----------------------------------------------------------------
 
-#[proc_macro_hack]
-pub fn random_impl(input: TokenStream) -> TokenStream {
+#[proc_macro_attribute]
+pub fn random_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
+	drop(args);
+	replace_macro(input, "_random_", random_impl)
+}
+
+fn random_impl(input: TokenStream) -> TokenStream {
 	let mut tt = input.into_iter();
 	match tt.next() {
 		Some(TokenTree::Ident(ident)) => {
@@ -203,4 +227,62 @@ fn random_parse(input: Ident) -> TokenTree {
 		"f64" => Literal::f64_suffixed(rand::random::<f64>()),
 		s => panic!("unsupported type: `{}`", s),
 	}.into()
+}
+
+//----------------------------------------------------------------
+// Implements a tt muncher for proc-macros
+
+fn replace<F>(input: TokenStream, mut f: F) -> TokenStream
+	where F: FnMut(&[TokenTree]) -> Option<(usize, TokenStream)>
+{
+	let input: Vec<TokenTree> = input.into_iter().collect();
+	let mut output = Vec::new();
+	replace_rec(input, &mut output, &mut f);
+	output.into_iter().collect()
+}
+fn replace_rec(input: Vec<TokenTree>, output: &mut Vec<TokenTree>, f: &mut FnMut(&[TokenTree]) -> Option<(usize, TokenStream)>) {
+	let mut into_iter = input.into_iter();
+	loop {
+		// If tokens are matched, insert the replacement and skip some tokens
+		if let Some((mut skip, replace)) = f(into_iter.as_slice()) {
+			output.extend(replace);
+			while skip > 0 {
+				let _ = into_iter.next();
+				skip -= 1;
+			}
+		}
+		match into_iter.next() {
+			// Recursively process into groups
+			Some(TokenTree::Group(group)) => {
+				let group_input = group.stream().into_iter().collect();
+				let mut group_output = Vec::new();
+				replace_rec(group_input, &mut group_output, f);
+				let group_stream = group_output.into_iter().collect();
+				output.push(TokenTree::Group(Group::new(group.delimiter(), group_stream)));
+			},
+			Some(tt) => output.push(tt),
+			None => break,
+		}
+	}
+}
+// Replaces invocations of `$name!($tokens)` with the output of the callable given the `$tokens`.
+fn replace_macro(input: TokenStream, name: &str, f: fn(TokenStream) -> TokenStream) -> TokenStream {
+	replace(input, |tokens| {
+		if tokens.len() >= 3 {
+			if let (
+				TokenTree::Ident(ident),
+				TokenTree::Punct(punct),
+				TokenTree::Group(group),
+			) = (
+				&tokens[0],
+				&tokens[1],
+				&tokens[2],
+			) {
+				if punct.as_char() == '!' && ident.to_string() == name {
+					return Some((3, f(group.stream())));
+				}
+			}
+		}
+		None
+	})
 }
