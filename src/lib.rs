@@ -5,56 +5,74 @@ Compiletime string literal obfuscation.
 #![no_std]
 #![feature(fixed_size_array)]
 
-// WTF is this?! How do I fix it?!
-#![allow(macro_expanded_macro_exports_accessed_by_absolute_paths)]
-
 use core::{char, fmt, mem, ops, ptr, slice, str};
 use core::array::FixedSizeArray;
 
-/// Compiletime string literal obfuscation.
+// Reexport these because reasons...
+#[doc(hidden)]
+pub use obfstr_impl::*;
+
+/// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
 ///
 /// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
-///
-/// The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
 ///
 /// ```
 /// assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 /// ```
+#[macro_export]
+macro_rules! obfstr {
+	($string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		S.decrypt($crate::random!(usize) % 4096).as_str()
+	}};
+	(L$string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
+		S.decrypt($crate::random!(usize) % 4096).as_wide()
+	}};
+}
+
+/// Compiletime string literal obfuscation, returns the decrypted [`ObfBuffer`](struct.ObfBuffer.html) for assignment to local variable.
 ///
-/// The `local` modifier returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
+/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
 ///
 /// ```
-/// let str_buf = obfstr::obfstr!(local "Hello 🌍");
+/// let str_buf = obfstr::obflocal!("Hello 🌍");
 /// assert_eq!(str_buf.as_str(), "Hello 🌍");
 /// ```
+#[macro_export]
+macro_rules! obflocal {
+	($string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		S.decrypt($crate::random!(usize) % 4096)
+	}};
+	(L$string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
+		S.decrypt($crate::random!(usize) % 4096)
+	}};
+}
+
+/// Compiletime string literal obfuscation, returns the encrypted [`ObfString`](struct.ObfString.html) for use in constant expressions.
 ///
-/// The `const` modifier returns the encrypted `ObfString` for use in constant expressions:
+/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
 ///
 /// ```
-/// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfstr!(const "Hello 🌍");
+/// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
 /// assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
 /// ```
 #[macro_export]
-macro_rules! obfstr {
-	($string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096).as_str()
-	};
-	(local $string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096)
-	};
-	(const $string:literal) => {
-		$crate::obfstr_impl!($string)
-	};
-	// Support wide strings...
-	(L$string:literal) => {
-		(&$crate::obfstr_impl!(L$string)).decrypt($crate::random!(usize) % 4096).as_wide()
-	};
-	(local L$string:literal) => {
-		(&$crate::obfstr_impl!(L$string)).decrypt($crate::random!(usize) % 4096)
-	};
-	(const L$string:literal) => {
-		$crate::obfstr_impl!(L$string)
-	};
+macro_rules! obfconst {
+	($string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string)); S
+	}};
+	(L$string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string)); S
+	}};
 }
 
 /// Compiletime string obfuscation for serde.
@@ -65,14 +83,12 @@ macro_rules! obfstr {
 #[cfg(feature = "unsafe_static_str")]
 #[macro_export]
 macro_rules! unsafe_obfstr {
-	($string:literal) => {
-		(&$crate::obfstr_impl!($string)).decrypt($crate::random!(usize) % 4096).unsafe_as_static_str()
-	};
+	($string:literal) => {{
+		#[$crate::obfstr_attribute]
+		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		S.decrypt($crate::random!(usize) % 4096).unsafe_as_static_str()
+	}};
 }
-
-#[doc(hidden)]
-#[proc_macro_hack::proc_macro_hack]
-pub use obfstr_impl::obfstr_impl;
 
 /// Wide string literal of type `&'static [u16; LEN]`.
 ///
@@ -80,8 +96,13 @@ pub use obfstr_impl::obfstr_impl;
 /// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
 /// assert_eq!(obfstr::wide!("Wide"), expected);
 /// ```
-#[proc_macro_hack::proc_macro_hack]
-pub use obfstr_impl::wide_impl as wide;
+#[macro_export]
+macro_rules! wide {
+	($s:literal) => {{
+		#[$crate::wide_attribute]
+		const W: &[u16] = _wide_!($s); W
+	}};
+}
 
 /// Compiletime random number generator.
 ///
@@ -94,8 +115,13 @@ pub use obfstr_impl::wide_impl as wide;
 /// const RND: i32 = obfstr::random!(u8) as i32;
 /// assert!(RND >= 0 && RND <= 255);
 /// ```
-#[proc_macro_hack::proc_macro_hack]
-pub use obfstr_impl::random_impl as random;
+#[macro_export]
+macro_rules! random {
+	($ty:ident) => {{
+		#[$crate::random_attribute]
+		const N: $ty = _random_!($ty); N
+	}};
+}
 
 //----------------------------------------------------------------
 
@@ -118,6 +144,12 @@ const XREF_SHIFT: usize = ((random!(u8) & 31) + 32) as usize;
 pub struct ObfString<A> {
 	pub key: u32,
 	pub data: A,
+}
+impl<A> ObfString<A> {
+	/// Constructor.
+	pub const fn new(key: u32, data: A) -> ObfString<A> {
+		ObfString { key, data }
+	}
 }
 impl<A: FixedSizeArray<u8>> ObfString<A> {
 	/// Decrypts the obfuscated string and returns the buffer.
@@ -195,7 +227,14 @@ pub struct WObfString<A> {
 	pub key: u32,
 	pub data: A,
 }
+impl<A> WObfString<A> {
+	/// Constructor.
+	pub const fn new(key: u32, data: A) -> WObfString<A> {
+		WObfString { key, data }
+	}
+}
 impl<A: FixedSizeArray<u16>> WObfString<A> {
+	/// Decrypts the obfuscated wide string and returns the buffer.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
 		unsafe {
