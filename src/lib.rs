@@ -24,12 +24,12 @@ macro_rules! obfstr {
 	($string:literal) => {{
 		#[$crate::obfstr_attribute]
 		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
-		S.decrypt($crate::random!(usize) % 4096).as_str()
+		S.decrypt($crate::random!(usize) & 0xffff).as_str()
 	}};
 	(L$string:literal) => {{
 		#[$crate::obfstr_attribute]
 		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
-		S.decrypt($crate::random!(usize) % 4096).as_wide()
+		S.decrypt($crate::random!(usize) & 0xffff).as_wide()
 	}};
 }
 
@@ -46,12 +46,12 @@ macro_rules! obflocal {
 	($string:literal) => {{
 		#[$crate::obfstr_attribute]
 		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
-		S.decrypt($crate::random!(usize) % 4096)
+		S.decrypt($crate::random!(usize) & 0xffff)
 	}};
 	(L$string:literal) => {{
 		#[$crate::obfstr_attribute]
 		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
-		S.decrypt($crate::random!(usize) % 4096)
+		S.decrypt($crate::random!(usize) & 0xffff)
 	}};
 }
 
@@ -86,7 +86,7 @@ macro_rules! unsafe_obfstr {
 	($string:literal) => {{
 		#[$crate::obfstr_attribute]
 		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
-		S.decrypt($crate::random!(usize) % 4096).unsafe_as_static_str()
+		S.decrypt($crate::random!(usize) & 0xffff).unsafe_as_static_str()
 	}};
 }
 
@@ -140,10 +140,11 @@ const XREF_SHIFT: usize = ((random!(u8) & 31) + 32) as usize;
 /// Obfuscated string constant data.
 ///
 /// This type represents the data baked in the binary and holds the key and obfuscated string.
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct ObfString<A> {
-	pub key: u32,
-	pub data: A,
+	key: u32,
+	data: A,
 }
 impl<A> ObfString<A> {
 	/// Constructor.
@@ -153,6 +154,9 @@ impl<A> ObfString<A> {
 }
 impl<A: FixedSizeArray<u8>> ObfString<A> {
 	/// Decrypts the obfuscated string and returns the buffer.
+	///
+	/// The `x` argument should be a compiletime random 16-bit value.
+	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
 		unsafe {
@@ -163,6 +167,16 @@ impl<A: FixedSizeArray<u8>> ObfString<A> {
 			f(buffer.0.as_mut_slice(), src);
 			buffer
 		}
+	}
+}
+impl<A: FixedSizeArray<u8>> fmt::Debug for ObfString<A> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.decrypt(random!(usize) & 0xffff).fmt(f)
+	}
+}
+impl<A: FixedSizeArray<u8>> fmt::Display for ObfString<A> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
 #[inline(never)]
@@ -222,10 +236,11 @@ impl<A: FixedSizeArray<u8>> fmt::Display for ObfBuffer<A> {
 /// Obfuscated wide string constant data.
 ///
 /// This type represents the data baked in the binary and holds the key and obfuscated wide string.
+#[derive(Copy, Clone)]
 #[repr(C)]
 pub struct WObfString<A> {
-	pub key: u32,
-	pub data: A,
+	key: u32,
+	data: A,
 }
 impl<A> WObfString<A> {
 	/// Constructor.
@@ -235,6 +250,9 @@ impl<A> WObfString<A> {
 }
 impl<A: FixedSizeArray<u16>> WObfString<A> {
 	/// Decrypts the obfuscated wide string and returns the buffer.
+	///
+	/// The `x` argument should be a compiletime random 16-bit value.
+	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
 		unsafe {
@@ -245,6 +263,16 @@ impl<A: FixedSizeArray<u16>> WObfString<A> {
 			f(buffer.0.as_mut_slice(), src);
 			buffer
 		}
+	}
+}
+impl<A: FixedSizeArray<u16>> fmt::Debug for WObfString<A> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.decrypt(random!(usize) & 0xffff).fmt(f)
+	}
+}
+impl<A: FixedSizeArray<u16>> fmt::Display for WObfString<A> {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
 #[inline(never)]
