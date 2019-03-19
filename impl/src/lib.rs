@@ -46,16 +46,22 @@ fn obfstr_impl(input: TokenStream) -> TokenStream {
 
 	// Generate a random key
 	let key = rand::random::<u32>();
-	let result = if wide {
+	// Obfuscate the string itself
+	let array = if wide {
 		let mut words = {string}.encode_utf16().collect::<Vec<u16>>();
 		wencrypt(&mut words, key)
 	}
 	else {
 		let mut bytes = string.into_bytes();
 		encrypt(&mut bytes, key)
-	};
+	}.into_iter().collect();
 
-	result.parse().unwrap()
+	// Generate `key, [array]` to be passed to ObfString constructor
+	vec![
+		TokenTree::Literal(Literal::u32_suffixed(key)),
+		TokenTree::Punct(Punct::new(',', Spacing::Alone)),
+		TokenTree::Group(Group::new(Delimiter::Bracket, array)),
+	].into_iter().collect()
 }
 
 fn next_round(mut x: u32) -> u32 {
@@ -65,32 +71,30 @@ fn next_round(mut x: u32) -> u32 {
 	x
 }
 
-fn encrypt(bytes: &mut [u8], mut key: u32) -> String {
-	let mut result = format!("{}, [", key);
+fn encrypt(bytes: &mut [u8], mut key: u32) -> Vec<TokenTree> {
 	for byte in bytes.iter_mut() {
 		key = next_round(key);
 		*byte = (*byte).wrapping_sub(key as u8);
 	}
-	for byte in bytes.iter() {
-		use std::fmt::Write;
-		let _ = write!(result, "{},", byte);
+	let mut array = Vec::new();
+	for &byte in bytes.iter() {
+		array.push(TokenTree::Literal(Literal::u8_suffixed(byte)));
+		array.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
 	}
-	result.push_str("]");
-	result
+	array
 }
 
-fn wencrypt(words: &mut [u16], mut key: u32) -> String {
-	let mut result = format!("{}, [", key);
+fn wencrypt(words: &mut [u16], mut key: u32) -> Vec<TokenTree> {
 	for word in words.iter_mut() {
 		key = next_round(key);
 		*word = (*word).wrapping_sub(key as u16);
 	}
-	for word in words.iter() {
-		use std::fmt::Write;
-		let _ = write!(result, "{},", word);
+	let mut array = Vec::new();
+	for &word in words.iter() {
+		array.push(TokenTree::Literal(Literal::u16_suffixed(word)));
+		array.push(TokenTree::Punct(Punct::new(',', Spacing::Alone)));
 	}
-	result.push_str("]");
-	result
+	array
 }
 
 //----------------------------------------------------------------
