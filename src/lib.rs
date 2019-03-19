@@ -219,6 +219,11 @@ impl<A: FixedSizeArray<u8>> ops::Deref for ObfBuffer<A> {
 		self.as_str()
 	}
 }
+impl<A: FixedSizeArray<u8>> AsRef<str> for ObfBuffer<A> {
+	fn as_ref(&self) -> &str {
+		self.as_str()
+	}
+}
 impl<A: FixedSizeArray<u8>> fmt::Debug for ObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.as_str().fmt(f)
@@ -303,6 +308,11 @@ impl<A: FixedSizeArray<u16>> ops::Deref for WObfBuffer<A> {
 	type Target = [u16];
 	#[inline]
 	fn deref(&self) -> &[u16] {
+		self.as_wide()
+	}
+}
+impl<A: FixedSizeArray<u16>> AsRef<[u16]> for WObfBuffer<A> {
+	fn as_ref(&self) -> &[u16] {
 		self.as_wide()
 	}
 }
