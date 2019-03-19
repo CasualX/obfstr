@@ -90,7 +90,9 @@ macro_rules! unsafe_obfstr {
 	}};
 }
 
-/// Wide string literal of type `&'static [u16; LEN]`.
+/// Wide string literal, returns an array of words.
+///
+/// The type of the returned literal is `&'static [u16; LEN]`.
 ///
 /// ```
 /// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
