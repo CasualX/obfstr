@@ -3,12 +3,14 @@ use proc_macro::*;
 
 //----------------------------------------------------------------
 
+#[cfg(feature = "rand")]
 #[proc_macro_attribute]
 pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 	drop(args);
 	replace_macro(replace_macro(input, "_obfstr_", obfstr_impl), "_strlen_", strlen_impl)
 }
 
+#[cfg(feature = "rand")]
 fn strlen_impl(input: TokenStream) -> TokenStream {
 	if let Some(TokenTree::Literal(literal)) = input.into_iter().next() {
 		let s = string_parse(literal);
@@ -18,6 +20,7 @@ fn strlen_impl(input: TokenStream) -> TokenStream {
 		panic!("expected a string literal")
 	}
 }
+#[cfg(feature = "rand")]
 fn obfstr_impl(input: TokenStream) -> TokenStream {
 	let mut tt = input.into_iter();
 	let mut token = tt.next();
@@ -64,6 +67,7 @@ fn obfstr_impl(input: TokenStream) -> TokenStream {
 	].into_iter().collect()
 }
 
+#[cfg(feature = "rand")]
 fn next_round(mut x: u32) -> u32 {
 	x ^= x << 13;
 	x ^= x >> 17;
@@ -71,6 +75,7 @@ fn next_round(mut x: u32) -> u32 {
 	x
 }
 
+#[cfg(feature = "rand")]
 fn encrypt(bytes: &mut [u8], mut key: u32) -> Vec<TokenTree> {
 	for byte in bytes.iter_mut() {
 		key = next_round(key);
@@ -84,6 +89,7 @@ fn encrypt(bytes: &mut [u8], mut key: u32) -> Vec<TokenTree> {
 	array
 }
 
+#[cfg(feature = "rand")]
 fn wencrypt(words: &mut [u16], mut key: u32) -> Vec<TokenTree> {
 	for word in words.iter_mut() {
 		key = next_round(key);
@@ -195,12 +201,14 @@ fn wide_impl(input: TokenStream) -> TokenStream {
 
 //----------------------------------------------------------------
 
+#[cfg(feature = "rand")]
 #[proc_macro_attribute]
 pub fn random_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 	drop(args);
 	replace_macro(input, "_random_", random_impl)
 }
 
+#[cfg(feature = "rand")]
 fn random_impl(input: TokenStream) -> TokenStream {
 	let mut tt = input.into_iter();
 	match tt.next() {
@@ -215,6 +223,7 @@ fn random_impl(input: TokenStream) -> TokenStream {
 	}
 }
 
+#[cfg(feature = "rand")]
 fn random_parse(input: Ident) -> TokenTree {
 	match &*input.to_string() {
 		"u8" => Literal::u8_suffixed(rand::random::<u8>()),
