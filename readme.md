@@ -1,6 +1,11 @@
 String Obfuscation
 ==================
 
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![crates.io](https://img.shields.io/crates/v/obfstr.svg)](https://crates.io/crates/obfstr)
+[![docs.rs](https://docs.rs/obfstr/badge.svg)](https://docs.rs/obfstr)
+[![Build Status](https://travis-ci.org/CasualX/obfstr.svg?branch=master)](https://travis-ci.org/CasualX/obfstr)
+
 Compiletime string literal obfuscation for Rust.
 
 Examples
