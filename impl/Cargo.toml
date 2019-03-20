@@ -8,8 +8,9 @@ description = "Procedural macro implementation for obfstr"
 repository = "https://github.com/CasualX/obfstr"
 readme = "readme.md"
 
-[dependencies]
-rand = "0.6"
+[dependencies.rand]
+version = "0.6"
+optional = true
 
 [lib]
 proc-macro = true

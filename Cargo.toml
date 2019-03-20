@@ -12,6 +12,10 @@ keywords = ["str", "string", "literal", "obfuscation", "encryption"]
 categories = ["no-std"]
 
 [features]
+# To get just the `wide!` macro disable the default "rand" feature
+default = ["rand"]
+rand = ["obfstr-impl/rand"]
+
 # Enables static lifetime hack for serde
 unsafe_static_str = []
 

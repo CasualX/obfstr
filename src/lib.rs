@@ -5,12 +5,17 @@ Compiletime string literal obfuscation.
 #![no_std]
 #![feature(fixed_size_array)]
 
-use core::{char, fmt, mem, ops, ptr, slice, str};
-use core::array::FixedSizeArray;
-
 // Reexport these because reasons...
 #[doc(hidden)]
 pub use obfstr_impl::*;
+
+#[cfg(feature = "rand")]
+pub use cfgd::*;
+#[cfg(feature = "rand")]
+mod cfgd {
+
+use core::{char, fmt, mem, ops, ptr, slice, str};
+use core::array::FixedSizeArray;
 
 /// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
 ///
@@ -87,22 +92,6 @@ macro_rules! unsafe_obfstr {
 		#[$crate::obfstr_attribute]
 		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
 		S.decrypt($crate::random!(usize) & 0xffff).unsafe_as_static_str()
-	}};
-}
-
-/// Wide string literal, returns an array of words.
-///
-/// The type of the returned literal is `&'static [u16; LEN]`.
-///
-/// ```
-/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
-/// assert_eq!(obfstr::wide!("Wide"), expected);
-/// ```
-#[macro_export]
-macro_rules! wide {
-	($s:literal) => {{
-		#[$crate::wide_attribute]
-		const W: &[u16] = _wide_!($s); W
 	}};
 }
 
@@ -336,4 +325,21 @@ impl<A: FixedSizeArray<u16>> fmt::Display for WObfBuffer<A> {
 		}
 		Ok(())
 	}
+}
+}
+
+/// Wide string literal, returns an array of words.
+///
+/// The type of the returned literal is `&'static [u16; LEN]`.
+///
+/// ```
+/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
+/// assert_eq!(obfstr::wide!("Wide"), expected);
+/// ```
+#[macro_export]
+macro_rules! wide {
+	($s:literal) => {{
+		#[$crate::wide_attribute]
+		const W: &[u16] = _wide_!($s); W
+	}};
 }
