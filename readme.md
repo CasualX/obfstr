@@ -11,20 +11,13 @@ Compiletime string literal obfuscation for Rust.
 Examples
 --------
 
-Comes with a simple `wide!` macro to provide compile time utf16 string literals:
-
-```rust
-let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
-assert_eq!(obfstr::wide!("Wide"), expected);
-```
-
 The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
 
 ```rust
 assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 ```
 
-The `obflocal!` macro returns the `ObfBuffer` with the decrypted string and is more flexible but less ergonomic:
+The `obflocal!` macro returns the `ObfBuffer` with the deobfuscated string and is more flexible but less ergonomic:
 
 ```rust
 let str_buf = obfstr::obflocal!("Hello 🌍");
@@ -35,10 +28,17 @@ The `obfconst!` macro returns the encrypted `ObfString` for use in constant expr
 
 ```rust
 static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
-assert_eq!(GSTR.decrypt(0).as_str(), "Hello 🌍");
+assert_eq!(GSTR.deobfuscate(0).as_str(), "Hello 🌍");
 ```
 
-We're already depending on `rand`, why not throw in a compiletime random number generator:
+The `wide!` macro provides compile time utf16 string literals:
+
+```rust
+let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16, 0];
+assert_eq!(obfstr::wide!("Wide\0"), expected);
+```
+
+The `random!` macro provides compile time random values:
 
 ```rust
 const RND: i32 = obfstr::random!(u8) as i32;
