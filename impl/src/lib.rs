@@ -3,6 +3,25 @@ use proc_macro::*;
 
 //----------------------------------------------------------------
 
+/// Strips any outer `Delimiter::None` groups from the input,
+/// returning a `TokenStream` consisting of the innermost
+/// non-empty-group `TokenTree`.
+/// This is used to handle a proc macro being invoked
+/// by a `macro_rules!` expansion.
+/// See https://github.com/rust-lang/rust/issues/72545 for background
+fn ignore_groups(mut input: TokenStream) -> TokenStream {
+    let mut tokens = input.clone().into_iter();
+    loop {
+        if let Some(TokenTree::Group(group)) = tokens.next() {
+            if group.delimiter() == Delimiter::None {
+                input = group.stream();
+                continue;
+            }
+        }
+        return input;
+    }
+}
+
 #[cfg(feature = "rand")]
 #[proc_macro_attribute]
 pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -11,7 +30,8 @@ pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "rand")]
-fn strlen_impl(input: TokenStream) -> TokenStream {
+fn strlen_impl(mut input: TokenStream) -> TokenStream {
+    input = ignore_groups(input);
 	if let Some(TokenTree::Literal(literal)) = input.into_iter().next() {
 		let s = string_parse(literal);
 		TokenStream::from(TokenTree::Literal(Literal::usize_suffixed(s.len())))
@@ -21,7 +41,8 @@ fn strlen_impl(input: TokenStream) -> TokenStream {
 	}
 }
 #[cfg(feature = "rand")]
-fn obfstr_impl(input: TokenStream) -> TokenStream {
+fn obfstr_impl(mut input: TokenStream) -> TokenStream {
+    input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	let mut token = tt.next();
 
@@ -174,7 +195,8 @@ pub fn wide_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 	replace_macro(input, "_wide_", wide_impl)
 }
 
-fn wide_impl(input: TokenStream) -> TokenStream {
+fn wide_impl(mut input: TokenStream) -> TokenStream {
+    input = ignore_groups(input);
 	// Parse the input as a single string literal
 	let mut iter = input.into_iter();
 	let string = match iter.next() {
@@ -209,7 +231,8 @@ pub fn random_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "rand")]
-fn random_impl(input: TokenStream) -> TokenStream {
+fn random_impl(mut input: TokenStream) -> TokenStream {
+    input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	match tt.next() {
 		Some(TokenTree::Ident(ident)) => {
