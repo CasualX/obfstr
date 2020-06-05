@@ -1,6 +1,6 @@
 [package]
 name = "obfstr"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 authors = ["Casper <CasualX@users.noreply.github.com>"]
 license = "MIT"
@@ -20,7 +20,7 @@ rand = ["obfstr-impl/rand"]
 unsafe_static_str = []
 
 [dependencies]
-obfstr-impl = { path = "./impl", version = "0.1.0" }
+obfstr-impl = { path = "./impl", version = "0.1.1" }
 
 [workspace]
 members = [".", "./impl"]
