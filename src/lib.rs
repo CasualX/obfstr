@@ -186,6 +186,7 @@ unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
 #[repr(transparent)]
 pub struct ObfBuffer<A>(A);
 impl<A: FixedSizeArray<u8>> ObfBuffer<A> {
+	#[allow(deprecated)]
 	unsafe fn uninit() -> Self {
 		mem::uninitialized()
 	}
@@ -287,6 +288,7 @@ unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
 #[repr(transparent)]
 pub struct WObfBuffer<A>(A);
 impl<A: FixedSizeArray<u16>> WObfBuffer<A> {
+	#[allow(deprecated)]
 	unsafe fn uninit() -> Self {
 		mem::uninitialized()
 	}

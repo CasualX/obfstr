@@ -1,3 +1,5 @@
+#![allow(bare_trait_objects, ellipsis_inclusive_range_patterns)]
+
 extern crate proc_macro;
 use proc_macro::*;
 
