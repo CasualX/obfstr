@@ -12,8 +12,8 @@ use proc_macro::*;
 /// by a `macro_rules!` expansion.
 /// See https://github.com/rust-lang/rust/issues/72545 for background
 fn ignore_groups(mut input: TokenStream) -> TokenStream {
-    let mut tokens = input.clone().into_iter();
     loop {
+        let mut tokens = input.clone().into_iter();
         if let Some(TokenTree::Group(group)) = tokens.next() {
             if group.delimiter() == Delimiter::None {
                 input = group.stream();
@@ -22,6 +22,10 @@ fn ignore_groups(mut input: TokenStream) -> TokenStream {
         }
         return input;
     }
+}
+
+fn strip_groups(token: TokenTree) -> TokenTree {
+    ignore_groups(vec![token].into_iter().collect()).into_iter().next().unwrap()
 }
 
 #[cfg(feature = "rand")]
@@ -50,7 +54,7 @@ fn obfstr_impl(mut input: TokenStream) -> TokenStream {
 
 	// Optional L ident prefix to indicate wide strings
 	let mut wide = false;
-	if let Some(TokenTree::Ident(ident)) = &token {
+	if let Some(TokenTree::Ident(ident)) = &token.clone().map(strip_groups) {
 		if ident.to_string() == "L" {
 			wide = true;
 			token = tt.next();
@@ -58,9 +62,9 @@ fn obfstr_impl(mut input: TokenStream) -> TokenStream {
 	}
 
 	// Followed by a string literal
-	let string = match token {
+	let string = match token.map(strip_groups)  {
 		Some(TokenTree::Literal(lit)) => string_parse(lit),
-		Some(tt) => panic!("expected a string literal: `{}`", tt),
+		Some(tt) => panic!("expected a string literal: `{:?}`", tt),
 		None => panic!("expected a string literal"),
 	};
 
