@@ -3,7 +3,7 @@ Compiletime string literal obfuscation.
 */
 
 #![allow(incomplete_features)]
-#![feature(const_fn, const_generics, const_if_match, const_loop, const_panic)]
+#![feature(const_fn, const_generics, const_panic)]
 #![no_std]
 
 use core::{char, fmt, mem, ptr, str};
