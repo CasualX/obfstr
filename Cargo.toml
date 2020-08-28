@@ -1,26 +1,16 @@
 [package]
 name = "obfstr"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2018"
-authors = ["Casper <CasualX@users.noreply.github.com>"]
 license = "MIT"
+
+authors = ["Casper <CasualX@users.noreply.github.com>"]
 description = "Compiletime string literal obfuscation for Rust"
 documentation = "https://docs.rs/obfstr"
 repository = "https://github.com/CasualX/obfstr"
 readme = "readme.md"
-keywords = ["str", "string", "literal", "obfuscation", "encryption"]
+keywords = ["obfuscation", "hash", "random", "wide"]
 categories = ["no-std"]
 
 [features]
-# To get just the `wide!` macro disable the default "rand" feature
-default = ["rand"]
-rand = ["obfstr-impl/rand"]
-
-# Enables static lifetime hack for serde
 unsafe_static_str = []
-
-[dependencies]
-obfstr-impl = { path = "./impl", version = "0.1.1" }
-
-[workspace]
-members = [".", "./impl"]
