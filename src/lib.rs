@@ -83,13 +83,27 @@ pub const fn splitmix(seed: u64) -> u64 {
 #[inline(always)]
 pub const fn hash(s: &str) -> u32 {
 	let s = s.as_bytes();
-	let mut hash = 3581u32;
+	let mut result = 3581u32;
 	let mut i = 0usize;
 	while i < s.len() {
-		hash = hash.wrapping_mul(33).wrapping_add(s[i] as u32);
+		result = result.wrapping_mul(33).wrapping_add(s[i] as u32);
 		i += 1;
 	}
-	return hash;
+	return result;
+}
+
+/// Compiletime string hash.
+///
+/// Helper macro guarantees compiletime evaluation of the string literal hash.
+///
+/// ```
+/// const STRING: &str = "Hello World";
+/// const HASH: u32 = obfstr::hash!(STRING);
+/// assert_eq!(HASH, 1481604729);
+/// ```
+#[macro_export]
+macro_rules! hash {
+	($string:expr) => {{ const HASH: u32 = $crate::hash($string); HASH }};
 }
 
 /// Produces pseudorandom entropy given the file, line and column information.
