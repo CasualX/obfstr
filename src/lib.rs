@@ -14,62 +14,42 @@ use core::{char, fmt, mem, ptr, str};
 ///
 /// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
 ///
-/// If no type is specified then type inference picks one of the supported types.
-///
 /// The integer types generate a random value in their respective range.  
 /// The float types generate a random value in range of `[1.0, 2.0)`.
 ///
 /// While the result is generated at compiletime only the integer types are available in const contexts.
 ///
+/// Note that the seed _must_ be a uniformly distributed random `u64` value.
+/// If such a value is not available, see the [`splitmix`](fn.splitmix.html) function to generate it from non uniform random value.
+///
 /// ```
-/// // Explicit type
 /// const RND: i32 = obfstr::random!(u8) as i32;
 /// assert!(RND >= 0 && RND <= 255);
-///
-/// // Inferred type
-/// let rnd: f32 = obfstr::random!();
-/// assert!(rnd >= 1.0 && rnd < 2.0);
 /// ```
 #[macro_export]
 macro_rules! random {
-	(u8) => { $crate::random!(u64) as u8 };
-	(u16) => { $crate::random!(u64) as u16 };
-	(u32) => { $crate::random!(u64) as u32 };
-	(u64) => {{ const ENTROPY: u64 = $crate::entropy(file!(), line!(), column!()); ENTROPY }};
-	(usize) => { $crate::random!(u64) as usize };
-	(i8) => { $crate::random!(u64) as i8 };
-	(i16) => { $crate::random!(u64) as i16 };
-	(i32) => { $crate::random!(u64) as i32 };
-	(i64) => { $crate::random!(u64) as i64 };
-	(isize) => { $crate::random!(u64) as isize };
-	(bool) => { $crate::random!(u64) & 1 != 0 };
-	(f32) => { <f32 as $crate::Random>::random($crate::random!(u64)) };
-	(f64) => { <f64 as $crate::Random>::random($crate::random!(u64)) };
-	($_:ident) => { compile_error!(concat!("unsupported type: ", stringify!($_))) };
-	() => { $crate::Random::random($crate::random!(u64)) };
+	($ty:ident) => {{ const ENTROPY: u64 = $crate::entropy(file!(), line!(), column!()); $crate::random!($ty, ENTROPY) }};
+
+	(u8, $seed:expr) => { $seed as u8 };
+	(u16, $seed:expr) => { $seed as u16 };
+	(u32, $seed:expr) => { $seed as u32 };
+	(u64, $seed:expr) => { $seed as u64 };
+	(usize, $seed:expr) => { $seed as usize };
+	(i8, $seed:expr) => { $seed as i8 };
+	(i16, $seed:expr) => { $seed as i16 };
+	(i32, $seed:expr) => { $seed as i32 };
+	(i64, $seed:expr) => { $seed as i64 };
+	(isize, $seed:expr) => { $seed as isize };
+	(bool, $seed:expr) => { $seed as i64 >= 0 };
+	(f32, $seed:expr) => { f32::from_bits(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) };
+	(f64, $seed:expr) => { f64::from_bits(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) };
+	($_:ident, $seed:expr) => { compile_error!(concat!("unsupported type: ", stringify!($_))) };
 }
 
-#[doc(hidden)]
-pub trait Random {
-	fn random(seed: u64) -> Self;
-}
-
-impl Random for u8 { #[inline] fn random(seed: u64) -> u8 { seed as u8 } }
-impl Random for u16 { #[inline] fn random(seed: u64) -> u16 { seed as u16 } }
-impl Random for u32 { #[inline] fn random(seed: u64) -> u32 { seed as u32 } }
-impl Random for u64 { #[inline] fn random(seed: u64) -> u64 { seed } }
-
-impl Random for i8 { #[inline] fn random(seed: u64) -> i8 { seed as i8 } }
-impl Random for i16 { #[inline] fn random(seed: u64) -> i16 { seed as i16 } }
-impl Random for i32 { #[inline] fn random(seed: u64) -> i32 { seed as i32 } }
-impl Random for i64 { #[inline] fn random(seed: u64) -> i64 { seed as i64 } }
-
-impl Random for bool { #[inline] fn random(seed: u64) -> bool { seed & 1 != 0 } }
-
-impl Random for f32 { #[inline] fn random(seed: u64) -> f32 { f32::from_bits(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | (seed as u32 >> 9)) } }
-impl Random for f64 { #[inline] fn random(seed: u64) -> f64 { f64::from_bits(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | (seed >> 12)) } }
-
-/// Compiletime RNG.
+/// Compiletime bitmixing.
+///
+/// Takes an intermediate hash that may not be thoroughly mixed and increase its entropy to obtain both better distribution.
+/// See [Better Bit Mixing](https://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html) for reference.
 #[inline(always)]
 pub const fn splitmix(seed: u64) -> u64 {
 	let next = seed.wrapping_add(0x9e3779b97f4a7c15);
@@ -80,6 +60,8 @@ pub const fn splitmix(seed: u64) -> u64 {
 }
 
 /// Compiletime string hash.
+///
+/// Implemented using the [DJB2 hash function](http://www.cse.yorku.ca/~oz/hash.html#djb2).
 #[inline(always)]
 pub const fn hash(s: &str) -> u32 {
 	let s = s.as_bytes();
@@ -98,8 +80,7 @@ pub const fn hash(s: &str) -> u32 {
 ///
 /// ```
 /// const STRING: &str = "Hello World";
-/// const HASH: u32 = obfstr::hash!(STRING);
-/// assert_eq!(HASH, 1481604729);
+/// assert_eq!(obfstr::hash!(STRING), 1481604729);
 /// ```
 #[macro_export]
 macro_rules! hash {
@@ -110,7 +91,7 @@ macro_rules! hash {
 #[doc(hidden)]
 #[inline(always)]
 pub const fn entropy(file: &str, line: u32, column: u32) -> u64 {
-	splitmix(SEED ^ (hash(file) as u64 ^ (line as u64).rotate_left(32) ^ (column as u64).rotate_left(48)))
+	splitmix(splitmix(splitmix(SEED ^ hash(file) as u64) ^ line as u64) ^ column as u64)
 }
 
 /// Compiletime RNG seed.
@@ -270,8 +251,9 @@ impl<const LEN: usize> ObfString<[u8; LEN]> {
 		}
 		ObfString { key, data }
 	}
+	#[doc(hidden)]
 	#[inline(always)]
-	fn eq(&self, s: &str, x: usize) -> bool {
+	pub fn eq(&self, s: &str, x: usize) -> bool {
 		if LEN != s.len() {
 			return false;
 		}
@@ -280,26 +262,6 @@ impl<const LEN: usize> ObfString<[u8; LEN]> {
 			let f: unsafe fn(*const u8, *const u8, usize) -> bool = mem::transmute(ptr::read_volatile(&(decrypteq as usize + x)) - x);
 			f(obfstr, s.as_ptr(), LEN)
 		}
-	}
-}
-impl<const LEN: usize> PartialEq<str> for ObfString<[u8; LEN]> {
-	fn eq(&self, other: &str) -> bool {
-		self.eq(other, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u8; LEN]>> for str {
-	fn eq(&self, other: &ObfString<[u8; LEN]>) -> bool {
-		other.eq(self, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u8; LEN]>> for &str {
-	fn eq(&self, other: &ObfString<[u8; LEN]>) -> bool {
-		other.eq(*self, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> fmt::Debug for ObfString<[u8; LEN]> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		self.deobfuscate(random!(usize) & 0xffff).fmt(f)
 	}
 }
 
@@ -327,7 +289,7 @@ unsafe fn decrypteq(obfstr: *const u8, clearstr: *const u8, len: usize) -> bool 
 
 impl<const LEN: usize> ObfBuffer<[u8; LEN]> {
 	#[inline]
-	pub fn as_slice(&self) -> &[u8] {
+	pub const fn as_slice(&self) -> &[u8] {
 		&self.0
 	}
 	#[inline]
@@ -386,8 +348,9 @@ impl<const LEN: usize> ObfString<[u16; LEN]> {
 		}
 		ObfString { key, data }
 	}
+	#[doc(hidden)]
 	#[inline(always)]
-	fn eq(&self, s: &[u16], x: usize) -> bool {
+	pub fn eq(&self, s: &[u16], x: usize) -> bool {
 		if LEN != s.len() {
 			return false;
 		}
@@ -396,31 +359,6 @@ impl<const LEN: usize> ObfString<[u16; LEN]> {
 			let f: unsafe fn(*const u16, *const u16, usize) -> bool = mem::transmute(ptr::read_volatile(&(wdecrypteq as usize + x)) - x);
 			f(obfstr, s.as_ptr(), LEN)
 		}
-	}
-}
-impl<const LEN: usize> PartialEq<[u16]> for ObfString<[u16; LEN]> {
-	fn eq(&self, other: &[u16]) -> bool {
-		self.eq(other, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u16; LEN]>> for [u16] {
-	fn eq(&self, other: &ObfString<[u16; LEN]>) -> bool {
-		other.eq(self, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u16; LEN]>> for &[u16] {
-	fn eq(&self, other: &ObfString<[u16; LEN]>) -> bool {
-		other.eq(*self, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u16; LEN]>> for [u16; LEN] {
-	fn eq(&self, other: &ObfString<[u16; LEN]>) -> bool {
-		other.eq(self, random!(usize) & 0xffff)
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u16; LEN]>> for &[u16; LEN] {
-	fn eq(&self, other: &ObfString<[u16; LEN]>) -> bool {
-		other.eq(*self, random!(usize) & 0xffff)
 	}
 }
 impl<const LEN: usize> fmt::Debug for ObfString<[u16; LEN]> {
@@ -453,7 +391,7 @@ unsafe fn wdecrypteq(obfstr: *const u16, clearstr: *const u16, len: usize) -> bo
 
 impl<const LEN: usize> ObfBuffer<[u16; LEN]> {
 	#[inline]
-	pub fn as_slice(&self) -> &[u16] {
+	pub const fn as_slice(&self) -> &[u16] {
 		&self.0
 	}
 }
@@ -515,4 +453,18 @@ macro_rules! obflocal {
 macro_rules! obfconst {
 	($s:literal) => {{ const STRING: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s); STRING }};
 	(L$s:literal) => {{ const STRING: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s); STRING }};
+}
+
+/// Check if string equals specific string literal.
+///
+/// This does not need to decrypt the string before comparison and the comparison is not constant-time.
+///
+/// ```
+/// let e = "Hello 🌍";
+/// assert!(obfstr::obfeq!(e, "Hello 🌍"));
+/// ```
+#[macro_export]
+macro_rules! obfeq {
+	($e:expr, $s:literal) => { $crate::obfconst!($s).eq(&$e, $crate::random!(usize) & 0xffff) };
+	($e:expr, L$s:literal) => { $crate::obfconst!(L$s).eq($e, $crate::random!(usize) & 0xffff) };
 }
