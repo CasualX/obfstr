@@ -1,5 +1,5 @@
 /*!
-Compiletime string literal obfuscation.
+Compiletime string constant obfuscation.
 */
 
 #![allow(incomplete_features)]
@@ -59,7 +59,7 @@ pub const fn splitmix(seed: u64) -> u64 {
 	return z ^ (z >> 31);
 }
 
-/// Compiletime string hash.
+/// Compiletime string constant hash.
 ///
 /// Implemented using the [DJB2 hash function](http://www.cse.yorku.ca/~oz/hash.html#djb2).
 #[inline(always)]
@@ -74,9 +74,9 @@ pub const fn hash(s: &str) -> u32 {
 	return result;
 }
 
-/// Compiletime string hash.
+/// Compiletime string constant hash.
 ///
-/// Helper macro guarantees compiletime evaluation of the string literal hash.
+/// Helper macro guarantees compiletime evaluation of the string constant hash.
 ///
 /// ```
 /// const STRING: &str = "Hello World";
@@ -84,7 +84,7 @@ pub const fn hash(s: &str) -> u32 {
 /// ```
 #[macro_export]
 macro_rules! hash {
-	($string:expr) => {{ const HASH: u32 = $crate::hash($string); HASH }};
+	($s:expr) => {{ const HASH: u32 = $crate::hash($s); HASH }};
 }
 
 /// Produces pseudorandom entropy given the file, line and column information.
@@ -113,9 +113,9 @@ const fn next_round(mut x: u32) -> u32 {
 
 //----------------------------------------------------------------
 
-/// Wide string literal, returns an array of words.
+/// Wide string constant, returns an array of words.
 ///
-/// The type of the returned literal is `&'static [u16; LEN]`.
+/// The type of the returned constant is `&'static [u16; LEN]`.
 ///
 /// ```
 /// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16, 0];
@@ -123,7 +123,7 @@ const fn next_round(mut x: u32) -> u32 {
 /// ```
 #[macro_export]
 macro_rules! wide {
-	($s:literal) => { &$crate::wide::<{$crate::wide_len($s)}>($s) };
+	($s:expr) => { &$crate::wide::<{$crate::wide_len($s)}>($s) };
 }
 
 #[doc(hidden)]
@@ -294,7 +294,7 @@ impl<const LEN: usize> ObfBuffer<[u8; LEN]> {
 	}
 	#[inline]
 	pub fn as_str(&self) -> &str {
-		// This should be safe as it can only be constructed from a string literal...
+		// This should be safe as it can only be constructed from a string constant...
 		#[cfg(debug_assertions)]
 		return str::from_utf8(&self.0).unwrap();
 		#[cfg(not(debug_assertions))]
@@ -408,26 +408,26 @@ impl<const LEN: usize> fmt::Debug for ObfBuffer<[u16; LEN]> {
 
 //----------------------------------------------------------------
 
-/// Compiletime string literal obfuscation.
+/// Compiletime string constant obfuscation.
 ///
 /// Returns a borrowed temporary and may not escape the statement it was used in.
 ///
-/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
+/// Prefix the string with `L` to get an UTF-16 obfuscated string.
 ///
 /// ```
 /// assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 /// ```
 #[macro_export]
 macro_rules! obfstr {
-	($s:literal) => { $crate::obflocal!($s).as_str() };
-	(L$s:literal) => { $crate::obflocal!(L$s).as_ref() };
+	($s:expr) => { $crate::obflocal!($s).as_str() };
+	(L$s:expr) => { $crate::obflocal!(L$s).as_ref() };
 }
 
-/// Compiletime string literal obfuscation.
+/// Compiletime string constant obfuscation.
 ///
 /// Returns the deobfuscated [`ObfBuffer`](struct.ObfBuffer.html) for assignment to local variable.
 ///
-/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
+/// Prefix the string with `L` to get an UTF-16 obfuscated string.
 ///
 /// ```
 /// let str_buf = obfstr::obflocal!("Hello 🌍");
@@ -435,15 +435,15 @@ macro_rules! obfstr {
 /// ```
 #[macro_export]
 macro_rules! obflocal {
-	($s:literal) => { $crate::obfconst!($s).deobfuscate($crate::random!(usize) & 0xffff) };
-	(L$s:literal) => { $crate::obfconst!(L$s).deobfuscate($crate::random!(usize) & 0xffff) };
+	($s:expr) => { $crate::obfconst!($s).deobfuscate($crate::random!(usize) & 0xffff) };
+	(L$s:expr) => { $crate::obfconst!(L$s).deobfuscate($crate::random!(usize) & 0xffff) };
 }
 
-/// Compiletime string literal obfuscation.
+/// Compiletime string constant obfuscation.
 ///
 /// Returns the obfuscated [`ObfString`](struct.ObfString.html) for use in constant expressions.
 ///
-/// Prefix the string literal with `L` to get an UTF-16 obfuscated string.
+/// Prefix the string with `L` to get an UTF-16 obfuscated string.
 ///
 /// ```
 /// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
@@ -451,11 +451,11 @@ macro_rules! obflocal {
 /// ```
 #[macro_export]
 macro_rules! obfconst {
-	($s:literal) => {{ const STRING: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s); STRING }};
-	(L$s:literal) => {{ const STRING: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s); STRING }};
+	($s:expr) => {{ const STRING: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s); STRING }};
+	(L$s:expr) => {{ const STRING: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s); STRING }};
 }
 
-/// Check if string equals specific string literal.
+/// Check if string equals specific string constant.
 ///
 /// This does not need to decrypt the string before comparison and the comparison is not constant-time.
 ///
@@ -465,6 +465,6 @@ macro_rules! obfconst {
 /// ```
 #[macro_export]
 macro_rules! obfeq {
-	($e:expr, $s:literal) => { $crate::obfconst!($s).eq(&$e, $crate::random!(usize) & 0xffff) };
-	($e:expr, L$s:literal) => { $crate::obfconst!(L$s).eq($e, $crate::random!(usize) & 0xffff) };
+	($e:expr, $s:expr) => { $crate::obfconst!($s).eq(&$e, $crate::random!(usize) & 0xffff) };
+	($e:expr, L$s:expr) => { $crate::obfconst!(L$s).eq($e, $crate::random!(usize) & 0xffff) };
 }

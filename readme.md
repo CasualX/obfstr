@@ -6,39 +6,32 @@ String Obfuscation
 [![docs.rs](https://docs.rs/obfstr/badge.svg)](https://docs.rs/obfstr)
 [![Build Status](https://travis-ci.org/CasualX/obfstr.svg?branch=master)](https://travis-ci.org/CasualX/obfstr)
 
-Compiletime string literal obfuscation for Rust.
+Compiletime string constant obfuscation for Rust.
 
 Examples
 --------
 
-The `obfstr!` macro returns a borrowed temporary and may not escape the statement it was used in:
+The `obfstr!` macro returns the deobfuscated string constant:
+
+The string constant itself is embedded in obfuscated form and deobfuscated locally.
+This reference to a temporary value must be used in the same statement it was generated.
+See the documentation for more advanced use cases.
 
 ```rust
 assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 ```
 
-The `obflocal!` macro returns the `ObfBuffer` with the deobfuscated string and is more flexible but less ergonomic:
-
-```rust
-let str_buf = obfstr::obflocal!("Hello 🌍");
-assert_eq!(str_buf.as_str(), "Hello 🌍");
-```
-
-The `obfconst!` macro returns the encrypted `ObfString` for use in constant expressions:
-
-```rust
-static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
-assert_eq!(GSTR.deobfuscate(0).as_str(), "Hello 🌍");
-```
-
-The `wide!` macro provides compile time utf16 string literals:
+The `wide!` macro provides compiletime utf16 string constants:
 
 ```rust
 let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16, 0];
 assert_eq!(obfstr::wide!("Wide\0"), expected);
 ```
 
-The `random!` macro provides compile time random values:
+The `random!` macro provides compiletime random values:
+
+Based on `file!()`, `line!()`, `column!()` and a fixed seed to ensure reproducibility.
+This fixed seed is stored in the environment variable `OBFSTR_SEED` and can be changed as desired.
 
 ```rust
 const RND: i32 = obfstr::random!(u8) as i32;
