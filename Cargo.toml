@@ -5,7 +5,7 @@ edition = "2018"
 license = "MIT"
 
 authors = ["Casper <CasualX@users.noreply.github.com>"]
-description = "Compiletime string literal obfuscation for Rust"
+description = "Compiletime string constant obfuscation for Rust"
 documentation = "https://docs.rs/obfstr"
 repository = "https://github.com/CasualX/obfstr"
 readme = "readme.md"
