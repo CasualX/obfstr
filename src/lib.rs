@@ -410,45 +410,78 @@ impl<const LEN: usize> fmt::Debug for ObfBuffer<[u16; LEN]> {
 
 /// Compiletime string constant obfuscation.
 ///
-/// Returns a borrowed temporary and may not escape the statement it was used in.
+/// The string constants can be prefixed with `L` to get an UTF-16 equivalent obfuscated string.
 ///
-/// Prefix the string with `L` to get an UTF-16 obfuscated string.
+/// The string constant itself is embedded in obfuscated form and deobfuscated locally.
+/// This reference to a temporary value must be used in the same statement it was generated.
+/// See the documentation for more advanced use cases.
+///
+/// The `obfstr!` macro returns the deobfuscated string as a temporary value:
 ///
 /// ```
 /// assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
 /// ```
-#[macro_export]
-macro_rules! obfstr {
-	($s:expr) => { $crate::obflocal!($s).as_str() };
-	(L$s:expr) => { $crate::obflocal!(L$s).as_ref() };
-}
-
-/// Compiletime string constant obfuscation.
 ///
-/// Returns the deobfuscated [`ObfBuffer`](struct.ObfBuffer.html) for assignment to local variable.
-///
-/// Prefix the string with `L` to get an UTF-16 obfuscated string.
+/// To reuse the deobfuscated string [its container](struct.ObfBuffer.html) can be stored in a local variable:
 ///
 /// ```
-/// let str_buf = obfstr::obflocal!("Hello 🌍");
+/// obfstr::obfstr! {
+/// 	let str_buf = "Hello 🌍";
+/// }
 /// assert_eq!(str_buf.as_str(), "Hello 🌍");
 /// ```
+///
+/// The [obfuscated string](struct.ObfString.html) itself can be stored in a const or static variable:
+///
+/// ```
+/// obfstr::obfstr! {
+/// 	const GSTR = "Hello 🌍";
+/// }
+/// assert_eq!(GSTR.deobfuscate(0).as_str(), "Hello 🌍");
+/// ```
+#[macro_export]
+macro_rules! obfstr {
+	($($vis:vis const $NAME:ident = $s:expr;)*) => {$(
+		$vis const $NAME: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s);
+	)*};
+	($($vis:vis static $NAME:ident = $s:expr;)*) => {$(
+		$vis static $NAME: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s);
+	)*};
+	($(let $name:ident = $s:expr;)*) => {$(
+		$crate::obfstr! { const OBFSTRING = $s; }
+		let $name = OBFSTRING.deobfuscate($crate::random!(usize) & 0xffff);
+	)*};
+	($s:expr) => {{
+		$crate::obfstr! { const OBFSTRING = $s; }
+		OBFSTRING.deobfuscate($crate::random!(usize) & 0xffff).as_str()
+	}};
+
+	($($vis:vis const $NAME:ident = L$s:expr;)*) => {$(
+		$vis const $NAME: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s);
+	)*};
+	($($vis:vis static $NAME:ident = L$s:expr;)*) => {$(
+		$vis static $NAME: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s);
+	)*};
+	($(let $name:ident = L$s:expr;)*) => {$(
+		$crate::obfstr! { const OBFSTRING = L$s; }
+		let $name = OBFSTRING.deobfuscate($crate::random!(usize) & 0xffff)
+	)*};
+	(L$s:expr) => {{
+		$crate::obfstr! { const OBFSTRING = L$s; }
+		OBFSTRING.deobfuscate($crate::random!(usize) & 0xffff).as_ref()
+	}};
+}
+
+// Backwards compatibility.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! obflocal {
 	($s:expr) => { $crate::obfconst!($s).deobfuscate($crate::random!(usize) & 0xffff) };
 	(L$s:expr) => { $crate::obfconst!(L$s).deobfuscate($crate::random!(usize) & 0xffff) };
 }
 
-/// Compiletime string constant obfuscation.
-///
-/// Returns the obfuscated [`ObfString`](struct.ObfString.html) for use in constant expressions.
-///
-/// Prefix the string with `L` to get an UTF-16 obfuscated string.
-///
-/// ```
-/// static GSTR: obfstr::ObfString<[u8; 10]> = obfstr::obfconst!("Hello 🌍");
-/// assert_eq!(GSTR.deobfuscate(0).as_str(), "Hello 🌍");
-/// ```
+// Backwards compatibility.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! obfconst {
 	($s:expr) => {{ const STRING: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s); STRING }};
@@ -465,6 +498,12 @@ macro_rules! obfconst {
 /// ```
 #[macro_export]
 macro_rules! obfeq {
-	($e:expr, $s:expr) => { $crate::obfconst!($s).eq(&$e, $crate::random!(usize) & 0xffff) };
-	($e:expr, L$s:expr) => { $crate::obfconst!(L$s).eq($e, $crate::random!(usize) & 0xffff) };
+	($e:expr, $s:expr) => {{
+		$crate::obfstr! { const OBFSTRING = $s; }
+		OBFSTRING.eq($e, $crate::random!(usize) & 0xffff)
+	}};
+	($e:expr, L$s:expr) => {{
+		$crate::obfstr! { const OBFSTRING = L$s; }
+		OBFSTRING.eq($e, $crate::random!(usize) & 0xffff)
+	}};
 }

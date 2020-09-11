@@ -8,14 +8,14 @@ String Obfuscation
 
 Compiletime string constant obfuscation for Rust.
 
-Examples
---------
-
-The `obfstr!` macro returns the deobfuscated string constant:
-
 The string constant itself is embedded in obfuscated form and deobfuscated locally.
 This reference to a temporary value must be used in the same statement it was generated.
 See the documentation for more advanced use cases.
+
+Examples
+--------
+
+The `obfstr!` macro returns the deobfuscated string as a temporary value:
 
 ```rust
 assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
@@ -30,13 +30,13 @@ assert_eq!(obfstr::wide!("Wide\0"), expected);
 
 The `random!` macro provides compiletime random values:
 
-Based on `file!()`, `line!()`, `column!()` and a fixed seed to ensure reproducibility.
-This fixed seed is stored in the environment variable `OBFSTR_SEED` and can be changed as desired.
-
 ```rust
 const RND: i32 = obfstr::random!(u8) as i32;
 assert!(RND >= 0 && RND <= 255);
 ```
+
+Compiletime random values are based on `file!()`, `line!()`, `column!()` and a fixed seed to ensure reproducibility.
+This fixed seed is stored as text in the environment variable `OBFSTR_SEED` and can be changed as desired.
 
 License
 -------
