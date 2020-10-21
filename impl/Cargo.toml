@@ -8,7 +8,7 @@ description = "Procedural macro implementation for obfstr"
 repository = "https://github.com/CasualX/obfstr"
 
 [dependencies.rand]
-version = "0.6"
+version = "0.7"
 optional = true
 
 [lib]
