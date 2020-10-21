@@ -27,13 +27,17 @@ use core::array::FixedSizeArray;
 #[macro_export]
 macro_rules! obfstr {
 	($string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		const S: $crate::ObfString<[u8; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!($string);
+			$crate::ObfString::new(key, data)
+		};
 		S.decrypt($crate::random!(usize) & 0xffff).as_str()
 	}};
 	(L$string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
+		const S: $crate::WObfString<[u16; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!(L$string);
+			$crate::WObfString::new(key, data)
+		};
 		S.decrypt($crate::random!(usize) & 0xffff).as_wide()
 	}};
 }
@@ -49,13 +53,17 @@ macro_rules! obfstr {
 #[macro_export]
 macro_rules! obflocal {
 	($string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		const S: $crate::ObfString<[u8; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!($string);
+			$crate::ObfString::new(key, data)
+		};
 		S.decrypt($crate::random!(usize) & 0xffff)
 	}};
 	(L$string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string));
+		const S: $crate::WObfString<[u16; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!(L$string);
+			$crate::WObfString::new(key, data)
+		};
 		S.decrypt($crate::random!(usize) & 0xffff)
 	}};
 }
@@ -71,12 +79,16 @@ macro_rules! obflocal {
 #[macro_export]
 macro_rules! obfconst {
 	($string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string)); S
+		const S: $crate::ObfString<[u8; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!($string);
+			$crate::ObfString::new(key, data)
+		};S
 	}};
 	(L$string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::WObfString<[u16; _strlen_!($string)]> = $crate::WObfString::new(_obfstr_!(L$string)); S
+		const S: $crate::WObfString<[u16; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!(L$string);
+			$crate::WObfString::new(key, data)
+		};S
 	}};
 }
 
@@ -89,8 +101,10 @@ macro_rules! obfconst {
 #[macro_export]
 macro_rules! unsafe_obfstr {
 	($string:literal) => {{
-		#[$crate::obfstr_attribute]
-		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
+		const S: $crate::ObfString<[u8; $crate::_strlen_!($string)]> = {
+			let (key, data) = $crate::_obfstr_!($string);
+			$crate::ObfString::new(key, data)
+		};
 		S.decrypt($crate::random!(usize) & 0xffff).unsafe_as_static_str()
 	}};
 }
@@ -109,8 +123,7 @@ macro_rules! unsafe_obfstr {
 #[macro_export]
 macro_rules! random {
 	($ty:ident) => {{
-		#[$crate::random_attribute]
-		const N: $ty = _random_!($ty); N
+		const N: $ty = $crate::_random_!($ty); N
 	}};
 }
 
@@ -341,7 +354,6 @@ impl<A: FixedSizeArray<u16>> fmt::Display for WObfBuffer<A> {
 #[macro_export]
 macro_rules! wide {
 	($s:literal) => {{
-		#[$crate::wide_attribute]
-		const W: &[u16] = _wide_!($s); W
+		const W: &[u16] = $crate::_wide_!($s); W
 	}};
 }

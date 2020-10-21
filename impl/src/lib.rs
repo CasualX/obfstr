@@ -25,14 +25,8 @@ fn ignore_groups(mut input: TokenStream) -> TokenStream {
 }
 
 #[cfg(feature = "rand")]
-#[proc_macro_attribute]
-pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
-	drop(args);
-	replace_macro(replace_macro(input, "_obfstr_", obfstr_impl), "_strlen_", strlen_impl)
-}
-
-#[cfg(feature = "rand")]
-fn strlen_impl(mut input: TokenStream) -> TokenStream {
+#[proc_macro]
+pub fn _strlen_(mut input: TokenStream) -> TokenStream {
     input = ignore_groups(input);
 	if let Some(TokenTree::Literal(literal)) = input.into_iter().next() {
 		let s = string_parse(literal);
@@ -43,7 +37,8 @@ fn strlen_impl(mut input: TokenStream) -> TokenStream {
 	}
 }
 #[cfg(feature = "rand")]
-fn obfstr_impl(mut input: TokenStream) -> TokenStream {
+#[proc_macro]
+pub fn _obfstr_(mut input: TokenStream) -> TokenStream {
     input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	let mut token = tt.next();
@@ -60,7 +55,21 @@ fn obfstr_impl(mut input: TokenStream) -> TokenStream {
 	// Followed by a string literal
 	let string = match token {
 		Some(TokenTree::Literal(lit)) => string_parse(lit),
-		Some(tt) => panic!("expected a string literal: `{}`", tt),
+		// Sometimes I get an empty group here. Dunno why. Odd.
+		Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::None => {
+			let mut stream = group.stream().into_iter();
+			let lit = stream.next();
+			let ret = match lit {
+				Some(TokenTree::Literal(lit)) => string_parse(lit),
+				Some(tt) => panic!("Expected a string literal: `{}`", tt),
+				None => panic!("Expected a string literal"),
+			};
+			let last = stream.next();
+			assert!(last.is_none(), "Unexpected token: {}", last.unwrap());
+			ret
+		},
+		Some(tt) =>
+			panic!("expected a string literal: `{}`", tt),
 		None => panic!("expected a string literal"),
 	};
 
@@ -83,11 +92,14 @@ fn obfstr_impl(mut input: TokenStream) -> TokenStream {
 	}.into_iter().collect();
 
 	// Generate `key, [array]` to be passed to ObfString constructor
-	vec![
+	let out = vec![
 		TokenTree::Literal(Literal::u32_suffixed(key)),
 		TokenTree::Punct(Punct::new(',', Spacing::Alone)),
 		TokenTree::Group(Group::new(Delimiter::Bracket, array)),
-	].into_iter().collect()
+	].into_iter().collect();
+
+	// Generate `(out)`
+	TokenTree::Group(Group::new(Delimiter::Parenthesis, out)).into()
 }
 
 #[cfg(feature = "rand")]
@@ -191,13 +203,8 @@ fn string_parse(input: Literal) -> String {
 
 //----------------------------------------------------------------
 
-#[proc_macro_attribute]
-pub fn wide_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
-	drop(args);
-	replace_macro(input, "_wide_", wide_impl)
-}
-
-fn wide_impl(mut input: TokenStream) -> TokenStream {
+#[proc_macro]
+pub fn _wide_(mut input: TokenStream) -> TokenStream {
     input = ignore_groups(input);
 	// Parse the input as a single string literal
 	let mut iter = input.into_iter();
@@ -225,15 +232,8 @@ fn wide_impl(mut input: TokenStream) -> TokenStream {
 
 //----------------------------------------------------------------
 
-#[cfg(feature = "rand")]
-#[proc_macro_attribute]
-pub fn random_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
-	drop(args);
-	replace_macro(input, "_random_", random_impl)
-}
-
-#[cfg(feature = "rand")]
-fn random_impl(mut input: TokenStream) -> TokenStream {
+#[proc_macro]
+pub fn _random_(mut input: TokenStream) -> TokenStream {
     input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	match tt.next() {
@@ -265,62 +265,4 @@ fn random_parse(input: Ident) -> TokenTree {
 		"f64" => Literal::f64_suffixed(rand::random::<f64>()),
 		s => panic!("unsupported type: `{}`", s),
 	}.into()
-}
-
-//----------------------------------------------------------------
-// Implements a tt muncher for proc-macros
-
-fn replace<F>(input: TokenStream, mut f: F) -> TokenStream
-	where F: FnMut(&[TokenTree]) -> Option<(usize, TokenStream)>
-{
-	let input: Vec<TokenTree> = input.into_iter().collect();
-	let mut output = Vec::new();
-	replace_rec(input, &mut output, &mut f);
-	output.into_iter().collect()
-}
-fn replace_rec(input: Vec<TokenTree>, output: &mut Vec<TokenTree>, f: &mut FnMut(&[TokenTree]) -> Option<(usize, TokenStream)>) {
-	let mut into_iter = input.into_iter();
-	loop {
-		// If tokens are matched, insert the replacement and skip some tokens
-		if let Some((mut skip, replace)) = f(into_iter.as_slice()) {
-			output.extend(replace);
-			while skip > 0 {
-				let _ = into_iter.next();
-				skip -= 1;
-			}
-		}
-		match into_iter.next() {
-			// Recursively process into groups
-			Some(TokenTree::Group(group)) => {
-				let group_input = group.stream().into_iter().collect();
-				let mut group_output = Vec::new();
-				replace_rec(group_input, &mut group_output, f);
-				let group_stream = group_output.into_iter().collect();
-				output.push(TokenTree::Group(Group::new(group.delimiter(), group_stream)));
-			},
-			Some(tt) => output.push(tt),
-			None => break,
-		}
-	}
-}
-// Replaces invocations of `$name!($tokens)` with the output of the callable given the `$tokens`.
-fn replace_macro(input: TokenStream, name: &str, f: fn(TokenStream) -> TokenStream) -> TokenStream {
-	replace(input, |tokens| {
-		if tokens.len() >= 3 {
-			if let (
-				TokenTree::Ident(ident),
-				TokenTree::Punct(punct),
-				TokenTree::Group(group),
-			) = (
-				&tokens[0],
-				&tokens[1],
-				&tokens[2],
-			) {
-				if punct.as_char() == '!' && ident.to_string() == name {
-					return Some((3, f(group.stream())));
-				}
-			}
-		}
-		None
-	})
 }
