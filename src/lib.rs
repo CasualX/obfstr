@@ -7,6 +7,7 @@ Compiletime string literal obfuscation.
 // Reexport these because reasons...
 #[doc(hidden)]
 pub use obfstr_impl::*;
+pub use obfstr_impl::wide;
 
 #[cfg(feature = "rand")]
 pub use cfgd::*;
@@ -14,6 +15,7 @@ pub use cfgd::*;
 mod cfgd {
 
 use core::{char, fmt, mem, ops, ptr, slice, str};
+pub use obfstr_impl::random;
 
 /// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
 ///
@@ -90,25 +92,6 @@ macro_rules! unsafe_obfstr {
 		#[$crate::obfstr_attribute]
 		const S: $crate::ObfString<[u8; _strlen_!($string)]> = $crate::ObfString::new(_obfstr_!($string));
 		S.decrypt($crate::random!(usize) & 0xffff).unsafe_as_static_str()
-	}};
-}
-
-/// Compiletime random number generator.
-///
-/// Every time the code is compiled, a new random number literal is generated.
-/// Recompilation (and thus regeneration of the number) is not triggered automatically.
-///
-/// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
-///
-/// ```
-/// const RND: i32 = obfstr::random!(u8) as i32;
-/// assert!(RND >= 0 && RND <= 255);
-/// ```
-#[macro_export]
-macro_rules! random {
-	($ty:ident) => {{
-		#[$crate::random_attribute]
-		const N: $ty = _random_!($ty); N
 	}};
 }
 
@@ -326,20 +309,4 @@ impl<A: AsRef<[u16]>> fmt::Display for WObfBuffer<A> {
 		Ok(())
 	}
 }
-}
-
-/// Wide string literal, returns an array of words.
-///
-/// The type of the returned literal is `&'static [u16; LEN]`.
-///
-/// ```
-/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
-/// assert_eq!(obfstr::wide!("Wide"), expected);
-/// ```
-#[macro_export]
-macro_rules! wide {
-	($s:literal) => {{
-		#[$crate::wide_attribute]
-		const W: &[u16] = _wide_!($s); W
-	}};
 }
