@@ -15,6 +15,8 @@ pub use cfgd::*;
 mod cfgd {
 
 use core::{char, fmt, mem, ops, ptr, slice, str};
+use core::mem::MaybeUninit;
+
 pub use obfstr_impl::random;
 
 /// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
@@ -132,12 +134,12 @@ impl<A: AsRef<[u8]> + AsMut<[u8]>> ObfString<A> {
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
 		unsafe {
-			let mut buffer = ObfBuffer::<A>::uninit();
+			let mut buffer = MaybeUninit::uninit();
 			let data = self.data.as_ref();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
-			let f: unsafe fn(&mut [u8], usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut(), src);
-			buffer
+			let f: unsafe fn(*mut u8, usize, usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
+			f(buffer.as_mut_ptr() as *mut u8, mem::size_of::<A>(), src);
+			buffer.assume_init()
 		}
 	}
 }
@@ -152,12 +154,12 @@ impl<A: AsRef<[u8]> + AsMut<[u8]>> fmt::Display for ObfString<A> {
 	}
 }
 #[inline(never)]
-unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
-	let mut key = *((src + dest.len() * XREF_SHIFT - 4) as *const u32);
-	let data = slice::from_raw_parts((src + dest.len() * XREF_SHIFT) as *const u8, dest.len());
+unsafe fn decryptbuf(dest: *mut u8, dest_len: usize, src: usize) {
+	let mut key = *((src + dest_len * XREF_SHIFT - 4) as *const u32);
+	let data = slice::from_raw_parts((src + dest_len * XREF_SHIFT) as *const u8, dest_len);
 	for i in 0..data.len() {
 		key = next_round(key);
-		dest[i] = data[i].wrapping_add(key as u8);
+		*dest.add(i) = data[i].wrapping_add(key as u8);
 	}
 }
 /// Obfuscated string buffer.
@@ -167,10 +169,6 @@ unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
 #[repr(transparent)]
 pub struct ObfBuffer<A>(A);
 impl<A: AsRef<[u8]>> ObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
 	#[inline]
 	pub fn as_str(&self) -> &str {
 		#[cfg(debug_assertions)]
@@ -234,12 +232,12 @@ impl<A: AsRef<[u16]> + AsMut<[u16]>> WObfString<A> {
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
 		unsafe {
-			let mut buffer = WObfBuffer::<A>::uninit();
+			let mut buffer = MaybeUninit::uninit();
 			let data = self.data.as_ref();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
-			let f: unsafe fn(&mut [u16], usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut(), src);
-			buffer
+			let f: unsafe fn(*mut u16, usize, usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
+			f(buffer.as_mut_ptr() as *mut u16, mem::size_of::<A>() / 2, src);
+			buffer.assume_init()
 		}
 	}
 }
@@ -254,12 +252,12 @@ impl<A: AsRef<[u16]> + AsMut<[u16]>> fmt::Display for WObfString<A> {
 	}
 }
 #[inline(never)]
-unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
-	let mut key = *((src + dest.len() * XREF_SHIFT - 4) as *const u32);
-	let data = slice::from_raw_parts((src + dest.len() * XREF_SHIFT) as *const u16, dest.len());
+unsafe fn wdecryptbuf(dest: *mut u16, dest_len: usize, src: usize) {
+	let mut key = *((src + dest_len * XREF_SHIFT - 4) as *const u32);
+	let data = slice::from_raw_parts((src + dest_len * XREF_SHIFT) as *const u16, dest_len);
 	for i in 0..data.len() {
 		key = next_round(key);
-		dest[i] = data[i].wrapping_add(key as u16);
+		*dest.add(i) = data[i].wrapping_add(key as u16);
 	}
 }
 /// Obfuscated wide string buffer.
@@ -269,10 +267,6 @@ unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
 #[repr(transparent)]
 pub struct WObfBuffer<A>(A);
 impl<A: AsRef<[u16]>> WObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
 	#[inline]
 	pub fn as_wide(&self) -> &[u16] {
 		self.0.as_ref()
