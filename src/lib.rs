@@ -15,6 +15,7 @@ pub use cfgd::*;
 mod cfgd {
 
 use core::{char, fmt, mem, ops, ptr, slice, str};
+
 pub use obfstr_impl::random;
 
 /// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
@@ -124,7 +125,7 @@ impl<A> ObfString<A> {
 		ObfString { key, data }
 	}
 }
-impl<A: AsRef<[u8]> + AsMut<[u8]>> ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> ObfString<A> {
 	/// Decrypts the obfuscated string and returns the buffer.
 	///
 	/// The `x` argument should be a compiletime random 16-bit value.
@@ -132,21 +133,21 @@ impl<A: AsRef<[u8]> + AsMut<[u8]>> ObfString<A> {
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
 		unsafe {
-			let mut buffer = ObfBuffer::<A>::uninit();
+			let mut buffer = self.data.clone();
 			let data = self.data.as_ref();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u8], usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut(), src);
-			buffer
+			f(buffer.as_mut(), src);
+			ObfBuffer(buffer)
 		}
 	}
 }
-impl<A: AsRef<[u8]> + AsMut<[u8]>> fmt::Debug for ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> fmt::Debug for ObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
-impl<A: AsRef<[u8]> + AsMut<[u8]>> fmt::Display for ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> fmt::Display for ObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
@@ -167,10 +168,6 @@ unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
 #[repr(transparent)]
 pub struct ObfBuffer<A>(A);
 impl<A: AsRef<[u8]>> ObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
 	#[inline]
 	pub fn as_str(&self) -> &str {
 		#[cfg(debug_assertions)]
@@ -226,7 +223,7 @@ impl<A> WObfString<A> {
 		WObfString { key, data }
 	}
 }
-impl<A: AsRef<[u16]> + AsMut<[u16]>> WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> WObfString<A> {
 	/// Decrypts the obfuscated wide string and returns the buffer.
 	///
 	/// The `x` argument should be a compiletime random 16-bit value.
@@ -234,21 +231,21 @@ impl<A: AsRef<[u16]> + AsMut<[u16]>> WObfString<A> {
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
 		unsafe {
-			let mut buffer = WObfBuffer::<A>::uninit();
+			let mut buffer = self.data.clone();
 			let data = self.data.as_ref();
 			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u16], usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut(), src);
-			buffer
+			f(buffer.as_mut(), src);
+			WObfBuffer(buffer)
 		}
 	}
 }
-impl<A: AsRef<[u16]> + AsMut<[u16]>> fmt::Debug for WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> fmt::Debug for WObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
-impl<A: AsRef<[u16]> + AsMut<[u16]>> fmt::Display for WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> fmt::Display for WObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
@@ -269,10 +266,6 @@ unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
 #[repr(transparent)]
 pub struct WObfBuffer<A>(A);
 impl<A: AsRef<[u16]>> WObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
 	#[inline]
 	pub fn as_wide(&self) -> &[u16] {
 		self.0.as_ref()
