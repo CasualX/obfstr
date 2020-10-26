@@ -2,8 +2,7 @@
 Compiletime string constant obfuscation.
 */
 
-#![allow(incomplete_features)]
-#![feature(const_fn, const_generics, const_panic)]
+#![feature(min_const_generics)]
 #![no_std]
 
 use core::{char, fmt, str};
@@ -150,7 +149,8 @@ pub const fn wide_len(s: &str) -> usize {
 			i += 4;
 		}
 		else {
-			unimplemented!()
+			// unimplemented!()
+			loop { }
 		};
 		len += if chr >= 0x10000 { 2 } else { 1 };
 	}
@@ -182,7 +182,8 @@ pub const fn wide<const LEN: usize>(s: &str) -> [u16; LEN] {
 			i += 4;
 		}
 		else {
-			unimplemented!()
+			// unimplemented!()
+			loop { }
 		};
 		if chr >= 0x10000 {
 			data[j + 0] = (0xD800 + (chr - 0x10000) / 0x400) as u16;
