@@ -132,14 +132,14 @@ impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> ObfString<A> {
 	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
+		let mut buffer = self.data.clone();
+		let data = self.data.as_ref();
+		let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 		unsafe {
-			let mut buffer = self.data.clone();
-			let data = self.data.as_ref();
-			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u8], usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
 			f(buffer.as_mut(), src);
-			ObfBuffer(buffer)
 		}
+		ObfBuffer(buffer)
 	}
 }
 impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> fmt::Debug for ObfString<A> {
@@ -230,14 +230,14 @@ impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> WObfString<A> {
 	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
+		let mut buffer = self.data.clone();
+		let data = self.data.as_ref();
+		let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 		unsafe {
-			let mut buffer = self.data.clone();
-			let data = self.data.as_ref();
-			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u16], usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
 			f(buffer.as_mut(), src);
-			WObfBuffer(buffer)
 		}
+		WObfBuffer(buffer)
 	}
 }
 impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> fmt::Debug for WObfString<A> {
