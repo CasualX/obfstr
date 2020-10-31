@@ -12,20 +12,20 @@ use proc_macro::*;
 /// by a `macro_rules!` expansion.
 /// See https://github.com/rust-lang/rust/issues/72545 for background
 fn ignore_groups(mut input: TokenStream) -> TokenStream {
-    loop {
-        let mut tokens = input.clone().into_iter();
-        if let Some(TokenTree::Group(group)) = tokens.next() {
-            if group.delimiter() == Delimiter::None {
-                input = group.stream();
-                continue;
-            }
-        }
-        return input;
-    }
+	loop {
+		let mut tokens = input.clone().into_iter();
+		if let Some(TokenTree::Group(group)) = tokens.next() {
+			if group.delimiter() == Delimiter::None {
+				input = group.stream();
+				continue;
+			}
+		}
+		return input;
+	}
 }
 
 fn strip_groups(token: TokenTree) -> TokenTree {
-    ignore_groups(vec![token].into_iter().collect()).into_iter().next().unwrap()
+	ignore_groups(vec![token].into_iter().collect()).into_iter().next().unwrap()
 }
 
 #[cfg(feature = "rand")]
@@ -37,7 +37,7 @@ pub fn obfstr_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
 
 #[cfg(feature = "rand")]
 fn strlen_impl(mut input: TokenStream) -> TokenStream {
-    input = ignore_groups(input);
+	input = ignore_groups(input);
 	if let Some(TokenTree::Literal(literal)) = input.into_iter().next() {
 		let s = string_parse(literal);
 		TokenStream::from(TokenTree::Literal(Literal::usize_suffixed(s.len())))
@@ -48,7 +48,7 @@ fn strlen_impl(mut input: TokenStream) -> TokenStream {
 }
 #[cfg(feature = "rand")]
 fn obfstr_impl(mut input: TokenStream) -> TokenStream {
-    input = ignore_groups(input);
+	input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	let mut token = tt.next();
 
@@ -195,14 +195,18 @@ fn string_parse(input: Literal) -> String {
 
 //----------------------------------------------------------------
 
-#[proc_macro_attribute]
-pub fn wide_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
-	drop(args);
-	replace_macro(input, "_wide_", wide_impl)
-}
-
-fn wide_impl(mut input: TokenStream) -> TokenStream {
-    input = ignore_groups(input);
+/// Wide string literal, returns an array of words.
+///
+/// The type of the returned literal is `&'static [u16; LEN]`.
+///
+/// ```
+/// # use obfstr_impl as obfstr;
+/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16, 0];
+/// assert_eq!(obfstr::wide!("Wide\0"), expected);
+/// ```
+#[proc_macro]
+pub fn wide(input: TokenStream) -> TokenStream {
+	let input = ignore_groups(input);
 	// Parse the input as a single string literal
 	let mut iter = input.into_iter();
 	let string = match iter.next() {
@@ -229,46 +233,47 @@ fn wide_impl(mut input: TokenStream) -> TokenStream {
 
 //----------------------------------------------------------------
 
+/// Compiletime random number generator.
+///
+/// Every time the code is compiled, a new random number literal is generated.
+/// Recompilation (and thus regeneration of the number) is not triggered automatically.
+///
+/// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
+///
+/// ```
+/// # use obfstr_impl as obfstr;
+/// const RND: i32 = obfstr::random!(u8) as i32;
+/// assert!(RND >= 0 && RND <= 255);
+/// ```
 #[cfg(feature = "rand")]
-#[proc_macro_attribute]
-pub fn random_attribute(args: TokenStream, input: TokenStream) -> TokenStream {
-	drop(args);
-	replace_macro(input, "_random_", random_impl)
-}
-
-#[cfg(feature = "rand")]
-fn random_impl(mut input: TokenStream) -> TokenStream {
-    input = ignore_groups(input);
+#[proc_macro]
+pub fn random(input: TokenStream) -> TokenStream {
+	let input = ignore_groups(input);
 	let mut tt = input.into_iter();
 	match tt.next() {
 		Some(TokenTree::Ident(ident)) => {
 			if let Some(tt) = tt.next() {
 				panic!("unexpected token: `{}`", tt);
 			}
-			random_parse(ident).into()
+			TokenTree::Literal(match &*ident.to_string() {
+				"u8" => Literal::u8_suffixed(rand::random::<u8>()),
+				"u16" => Literal::u16_suffixed(rand::random::<u16>()),
+				"u32" => Literal::u32_suffixed(rand::random::<u32>()),
+				"u64" => Literal::u64_suffixed(rand::random::<u64>()),
+				"usize" => Literal::usize_suffixed(rand::random::<usize>()),
+				"i8" => Literal::i8_suffixed(rand::random::<i8>()),
+				"i16" => Literal::i16_suffixed(rand::random::<i16>()),
+				"i32" => Literal::i32_suffixed(rand::random::<i32>()),
+				"i64" => Literal::i64_suffixed(rand::random::<i64>()),
+				"isize" => Literal::isize_suffixed(rand::random::<isize>()),
+				"f32" => Literal::f32_suffixed(rand::random::<f32>()),
+				"f64" => Literal::f64_suffixed(rand::random::<f64>()),
+				s => panic!("unsupported type: `{}`", s),
+			}).into()
 		},
 		Some(tt) => panic!("expected a primitive name: `{}`", tt),
 		None => panic!("expected a primitive name"),
 	}
-}
-
-#[cfg(feature = "rand")]
-fn random_parse(input: Ident) -> TokenTree {
-	match &*input.to_string() {
-		"u8" => Literal::u8_suffixed(rand::random::<u8>()),
-		"u16" => Literal::u16_suffixed(rand::random::<u16>()),
-		"u32" => Literal::u32_suffixed(rand::random::<u32>()),
-		"u64" => Literal::u64_suffixed(rand::random::<u64>()),
-		"usize" => Literal::usize_suffixed(rand::random::<usize>()),
-		"i8" => Literal::i8_suffixed(rand::random::<i8>()),
-		"i16" => Literal::i16_suffixed(rand::random::<i16>()),
-		"i32" => Literal::i32_suffixed(rand::random::<i32>()),
-		"i64" => Literal::i64_suffixed(rand::random::<i64>()),
-		"isize" => Literal::isize_suffixed(rand::random::<isize>()),
-		"f32" => Literal::f32_suffixed(rand::random::<f32>()),
-		"f64" => Literal::f64_suffixed(rand::random::<f64>()),
-		s => panic!("unsupported type: `{}`", s),
-	}.into()
 }
 
 //----------------------------------------------------------------

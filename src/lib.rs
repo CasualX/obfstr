@@ -3,11 +3,11 @@ Compiletime string literal obfuscation.
 !*/
 
 #![no_std]
-#![feature(fixed_size_array)]
 
 // Reexport these because reasons...
 #[doc(hidden)]
 pub use obfstr_impl::*;
+pub use obfstr_impl::wide;
 
 #[cfg(feature = "rand")]
 pub use cfgd::*;
@@ -15,7 +15,8 @@ pub use cfgd::*;
 mod cfgd {
 
 use core::{char, fmt, mem, ops, ptr, slice, str};
-use core::array::FixedSizeArray;
+
+pub use obfstr_impl::random;
 
 /// Compiletime string literal obfuscation, returns a borrowed temporary and may not escape the statement it was used in.
 ///
@@ -95,25 +96,6 @@ macro_rules! unsafe_obfstr {
 	}};
 }
 
-/// Compiletime random number generator.
-///
-/// Every time the code is compiled, a new random number literal is generated.
-/// Recompilation (and thus regeneration of the number) is not triggered automatically.
-///
-/// Supported types are `u8`, `u16`, `u32`, `u64`, `usize`, `i8`, `i16`, `i32`, `i64`, `isize`, `bool`, `f32` and `f64`.
-///
-/// ```
-/// const RND: i32 = obfstr::random!(u8) as i32;
-/// assert!(RND >= 0 && RND <= 255);
-/// ```
-#[macro_export]
-macro_rules! random {
-	($ty:ident) => {{
-		#[$crate::random_attribute]
-		const N: $ty = _random_!($ty); N
-	}};
-}
-
 //----------------------------------------------------------------
 
 fn next_round(mut x: u32) -> u32 {
@@ -143,29 +125,29 @@ impl<A> ObfString<A> {
 		ObfString { key, data }
 	}
 }
-impl<A: FixedSizeArray<u8>> ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> ObfString<A> {
 	/// Decrypts the obfuscated string and returns the buffer.
 	///
 	/// The `x` argument should be a compiletime random 16-bit value.
 	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> ObfBuffer<A> {
+		let mut buffer = self.data.clone();
+		let data = self.data.as_ref();
+		let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 		unsafe {
-			let mut buffer = ObfBuffer::<A>::uninit();
-			let data = self.data.as_slice();
-			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u8], usize) = mem::transmute(ptr::read_volatile(&(decryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut_slice(), src);
-			buffer
+			f(buffer.as_mut(), src);
 		}
+		ObfBuffer(buffer)
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Debug for ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> fmt::Debug for ObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Display for ObfString<A> {
+impl<A: AsRef<[u8]> + AsMut<[u8]> + Clone> fmt::Display for ObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
@@ -185,15 +167,11 @@ unsafe fn decryptbuf(dest: &mut [u8], src: usize) {
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 pub struct ObfBuffer<A>(A);
-impl<A: FixedSizeArray<u8>> ObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
+impl<A: AsRef<[u8]>> ObfBuffer<A> {
 	#[inline]
 	pub fn as_str(&self) -> &str {
 		#[cfg(debug_assertions)]
-		return str::from_utf8(self.0.as_slice()).unwrap();
+		return str::from_utf8(self.0.as_ref()).unwrap();
 		#[cfg(not(debug_assertions))]
 		return unsafe { str::from_utf8_unchecked(self.0.as_slice()) };
 	}
@@ -204,24 +182,24 @@ impl<A: FixedSizeArray<u8>> ObfBuffer<A> {
 		unsafe { &*(self.as_str() as *const _) }
 	}
 }
-impl<A: FixedSizeArray<u8>> ops::Deref for ObfBuffer<A> {
+impl<A: AsRef<[u8]>> ops::Deref for ObfBuffer<A> {
 	type Target = str;
 	#[inline]
 	fn deref(&self) -> &str {
 		self.as_str()
 	}
 }
-impl<A: FixedSizeArray<u8>> AsRef<str> for ObfBuffer<A> {
+impl<A: AsRef<[u8]>> AsRef<str> for ObfBuffer<A> {
 	fn as_ref(&self) -> &str {
 		self.as_str()
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Debug for ObfBuffer<A> {
+impl<A: AsRef<[u8]>> fmt::Debug for ObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.as_str().fmt(f)
 	}
 }
-impl<A: FixedSizeArray<u8>> fmt::Display for ObfBuffer<A> {
+impl<A: AsRef<[u8]>> fmt::Display for ObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.as_str().fmt(f)
 	}
@@ -245,29 +223,29 @@ impl<A> WObfString<A> {
 		WObfString { key, data }
 	}
 }
-impl<A: FixedSizeArray<u16>> WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> WObfString<A> {
 	/// Decrypts the obfuscated wide string and returns the buffer.
 	///
 	/// The `x` argument should be a compiletime random 16-bit value.
 	/// It is used to obfuscate the underlying call to the decrypt routine.
 	#[inline(always)]
 	pub fn decrypt(&self, x: usize) -> WObfBuffer<A> {
+		let mut buffer = self.data.clone();
+		let data = self.data.as_ref();
+		let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 		unsafe {
-			let mut buffer = WObfBuffer::<A>::uninit();
-			let data = self.data.as_slice();
-			let src = data.as_ptr() as usize - data.len() * XREF_SHIFT;
 			let f: unsafe fn(&mut [u16], usize) = mem::transmute(ptr::read_volatile(&(wdecryptbuf as usize + x)) - x);
-			f(buffer.0.as_mut_slice(), src);
-			buffer
+			f(buffer.as_mut(), src);
 		}
+		WObfBuffer(buffer)
 	}
 }
-impl<A: FixedSizeArray<u16>> fmt::Debug for WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> fmt::Debug for WObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
 }
-impl<A: FixedSizeArray<u16>> fmt::Display for WObfString<A> {
+impl<A: AsRef<[u16]> + AsMut<[u16]> + Clone> fmt::Display for WObfString<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		self.decrypt(random!(usize) & 0xffff).fmt(f)
 	}
@@ -287,29 +265,25 @@ unsafe fn wdecryptbuf(dest: &mut [u16], src: usize) {
 #[derive(Copy, Clone)]
 #[repr(transparent)]
 pub struct WObfBuffer<A>(A);
-impl<A: FixedSizeArray<u16>> WObfBuffer<A> {
-	#[allow(deprecated)]
-	unsafe fn uninit() -> Self {
-		mem::uninitialized()
-	}
+impl<A: AsRef<[u16]>> WObfBuffer<A> {
 	#[inline]
 	pub fn as_wide(&self) -> &[u16] {
-		self.0.as_slice()
+		self.0.as_ref()
 	}
 }
-impl<A: FixedSizeArray<u16>> ops::Deref for WObfBuffer<A> {
+impl<A: AsRef<[u16]>> ops::Deref for WObfBuffer<A> {
 	type Target = [u16];
 	#[inline]
 	fn deref(&self) -> &[u16] {
 		self.as_wide()
 	}
 }
-impl<A: FixedSizeArray<u16>> AsRef<[u16]> for WObfBuffer<A> {
+impl<A: AsRef<[u16]>> AsRef<[u16]> for WObfBuffer<A> {
 	fn as_ref(&self) -> &[u16] {
 		self.as_wide()
 	}
 }
-impl<A: FixedSizeArray<u16>> fmt::Debug for WObfBuffer<A> {
+impl<A: AsRef<[u16]>> fmt::Debug for WObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Write;
 		f.write_str("\"")?;
@@ -319,7 +293,7 @@ impl<A: FixedSizeArray<u16>> fmt::Debug for WObfBuffer<A> {
 		f.write_str("\"")
 	}
 }
-impl<A: FixedSizeArray<u16>> fmt::Display for WObfBuffer<A> {
+impl<A: AsRef<[u16]>> fmt::Display for WObfBuffer<A> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		use fmt::Write;
 		for chr in char::decode_utf16(self.as_wide().iter().cloned()) {
@@ -328,20 +302,4 @@ impl<A: FixedSizeArray<u16>> fmt::Display for WObfBuffer<A> {
 		Ok(())
 	}
 }
-}
-
-/// Wide string literal, returns an array of words.
-///
-/// The type of the returned literal is `&'static [u16; LEN]`.
-///
-/// ```
-/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16];
-/// assert_eq!(obfstr::wide!("Wide"), expected);
-/// ```
-#[macro_export]
-macro_rules! wide {
-	($s:literal) => {{
-		#[$crate::wide_attribute]
-		const W: &[u16] = _wide_!($s); W
-	}};
 }
