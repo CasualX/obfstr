@@ -375,22 +375,55 @@ pub fn unsafe_as_str(bytes: &[u8]) -> &str {
 /// assert_eq!(s, "Hello 🌍");
 /// ```
 ///
+/// To return an obfuscated string from a function pass a buffer.
+/// Panics if the buffer is too small:
+///
+/// ```
+/// use obfstr::obfstr;
+///
+/// fn helper(buf: &mut [u8]) -> &str {
+/// 	obfstr!(buf <- "hello")
+/// }
+///
+/// let mut buf = [0u8; 16];
+/// assert_eq!(helper(&mut buf), "hello");
+/// ```
+///
 /// The string constants can be prefixed with `L` to get an UTF-16 equivalent obfuscated string as `&[u16; LEN]`.
 #[macro_export]
 macro_rules! obfstr {
+	($buf:ident <- $s:expr) => {{
+		const STRING: &str = $s;
+		const LEN: usize = STRING.len();
+		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
+		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
+		let buf = &mut $buf[..LEN];
+		buf.copy_from_slice(&$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM));
+		$crate::unsafe_as_str(buf)
+	}};
+	($buf:ident <- L$s:expr) => {{
+		const STRING: &[u16] = $crate::wide!($s);
+		const LEN: usize = STRING.len();
+		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
+		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
+		let buf = &mut $buf[..LEN];
+		buf.copy_from_slice(&$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM));
+		buf
+	}};
+
 	($s:expr) => {{
 		const STRING: &str = $s;
 		const LEN: usize = STRING.len();
 		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
-		const OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<LEN>(&OBFSTRING, &KEYSTREAM))
+		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
+		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM))
 	}};
 	(L$s:expr) => {{
 		const STRING: &[u16] = $crate::wide!($s);
 		const LEN: usize = STRING.len();
 		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
-		const OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-		&$crate::words::deobfuscate::<LEN>(&OBFSTRING, &KEYSTREAM)
+		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
+		&$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
 	}};
 
 	($(let $name:ident = $s:expr;)*) => {$(
@@ -398,8 +431,8 @@ macro_rules! obfstr {
 			const STRING: &str = $s;
 			const LEN: usize = STRING.len();
 			const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
-			const OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-			$crate::bytes::deobfuscate::<LEN>(&OBFSTRING, &KEYSTREAM)
+			static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
+			$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
 		};
 		let $name = $crate::unsafe_as_str(&$name);
 	)*};
@@ -408,8 +441,8 @@ macro_rules! obfstr {
 			const STRING: &[u16] = $crate::wide!($s);
 			const LEN: usize = STRING.len();
 			const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
-			const OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-			$crate::words::deobfuscate::<LEN>(&OBFSTRING, &KEYSTREAM)
+			static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
+			$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
 		};
 		let $name = &$name;
 	)*};
