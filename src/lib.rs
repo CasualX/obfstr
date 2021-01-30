@@ -5,7 +5,7 @@ Compiletime string constant obfuscation.
 #![feature(min_const_generics)]
 #![no_std]
 
-use core::{char, fmt, str};
+use core::{char, fmt, ops, str};
 
 //----------------------------------------------------------------
 
@@ -104,6 +104,58 @@ pub const fn entropy(file: &str, line: u32, column: u32) -> u64 {
 /// This value is derived from the environment variable `OBFSTR_SEED` and has a fixed value if absent.
 /// If it changes all downstream dependents are recompiled automatically.
 pub const SEED: u64 = splitmix(hash(env!("OBFSTR_SEED")) as u64);
+
+//----------------------------------------------------------------
+
+/// Finds the position of the needle in the haystack at compiletime.
+///
+/// Produces a const-eval error if the needle is not a substring of the haystack.
+///
+/// ```
+/// assert_eq!(obfstr::position!("haystack", "st"), 3..5);
+///# assert_eq!(obfstr::position!("haystack", "haystack"), 0..8);
+///# assert_eq!(obfstr::position!("haystack", "ck"), 6..8);
+/// ```
+#[macro_export]
+macro_rules! position {
+	($haystack:expr, $needle:expr) => {{
+		const POSITION: ::core::ops::Range<usize> = $crate::position($haystack, $needle);
+		POSITION
+	}};
+}
+
+/// Finds the position of the needle in the haystack at compiletime.
+///
+/// Produces a const-eval error if the needle is not a substring of the haystack.
+///
+/// ```
+/// const POSITION: std::ops::Range<usize> = obfstr::position("haystack", "st");
+/// assert_eq!(POSITION, 3..5);
+/// ```
+pub const fn position(haystack: &str, needle: &str) -> ops::Range<usize> {
+	const fn check(haystack: &[u8], needle: &[u8], offset: usize) -> bool {
+		let mut i = 0;
+		while i < needle.len() {
+			if haystack[offset + i] != needle[i] {
+				return false;
+			}
+			i += 1;
+		}
+		return true;
+	}
+	let mut offset = 0;
+	let haystack = haystack.as_bytes();
+	let needle = needle.as_bytes();
+	while offset + needle.len() <= haystack.len() {
+		if check(haystack, needle, offset) {
+			return offset..offset + needle.len();
+		}
+		offset += 1;
+	}
+	// Compile error if substring not found
+	let _ = haystack[haystack.len()];
+	return 0..0;
+}
 
 //----------------------------------------------------------------
 
