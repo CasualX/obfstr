@@ -5,7 +5,7 @@ Compiletime string constant obfuscation.
 #![feature(min_const_generics)]
 #![no_std]
 
-use core::{char, fmt, ops, str};
+use core::{char, fmt, ops, ptr, str};
 
 //----------------------------------------------------------------
 
@@ -132,6 +132,7 @@ macro_rules! position {
 /// const POSITION: std::ops::Range<usize> = obfstr::position("haystack", "st");
 /// assert_eq!(POSITION, 3..5);
 /// ```
+#[inline(always)]
 pub const fn position(haystack: &str, needle: &str) -> ops::Range<usize> {
 	const fn check(haystack: &[u8], needle: &[u8], offset: usize) -> bool {
 		let mut i = 0;
@@ -390,6 +391,60 @@ impl<const LEN: usize> fmt::Debug for ObfBuffer<[u16; LEN]> {
 
 //----------------------------------------------------------------
 
+/// Obfuscates the xref to static data.
+///
+/// The offset can be initialized with [`random!`] for a compiletime random value.
+///
+/// ```
+/// static FOO: i32 = 42;
+/// let foo = obfstr::xref(&FOO, 0x123);
+///
+/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
+/// assert_eq!(foo as *const _, &FOO as *const _);
+/// ```
+#[inline(always)]
+pub fn xref<T: ?Sized>(p: &'static T, offset: usize) -> &'static T {
+	unsafe {
+		let mut p: *const T = p;
+		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
+		let val = ptr::read_volatile(&(p as *const u8).wrapping_sub(offset)).wrapping_add(offset);
+		// set_ptr_value
+		*(&mut p as *mut *const T as *mut *const u8) = val;
+		&*p
+	}
+}
+/// Obfuscates the xref to static data.
+///
+/// The offset can be initialized with [`random!`] for a compiletime random value.
+///
+/// ```
+/// static mut FOO: i32 = 42;
+/// let foo = obfstr::xref_mut(unsafe { &mut FOO }, 0x321);
+///
+/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
+/// assert_eq!(foo as *mut _, unsafe { &mut FOO } as *mut _);
+/// ```
+#[inline(always)]
+pub fn xref_mut<T: ?Sized>(p: &'static mut T, offset: usize) -> &'static mut T {
+	unsafe {
+		let mut p: *mut T = p;
+		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
+		let val = ptr::read_volatile(&(p as *mut u8).wrapping_sub(offset)).wrapping_add(offset);
+		// set_ptr_value
+		*(&mut p as *mut *mut T as *mut *mut u8) = val;
+		&mut *p
+	}
+}
+
+#[test]
+fn test_xref_slice() {
+	static FOO: [i32; 42] = [13; 42];
+	let foo = xref::<[i32]>(&FOO[..], 0x1000);
+	assert_eq!(foo as *const _, &FOO as *const _);
+}
+
+//----------------------------------------------------------------
+
 #[doc(hidden)]
 #[inline(always)]
 pub fn unsafe_as_str(bytes: &[u8]) -> &str {
@@ -450,7 +505,7 @@ macro_rules! obfstr {
 		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
 		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
 		let buf = &mut $buf[..LEN];
-		buf.copy_from_slice(&$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM));
+		buf.copy_from_slice(&$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM));
 		$crate::unsafe_as_str(buf)
 	}};
 	($buf:ident <- L$s:expr) => {{
@@ -459,7 +514,7 @@ macro_rules! obfstr {
 		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
 		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
 		let buf = &mut $buf[..LEN];
-		buf.copy_from_slice(&$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM));
+		buf.copy_from_slice(&$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM));
 		buf
 	}};
 
@@ -468,14 +523,14 @@ macro_rules! obfstr {
 		const LEN: usize = STRING.len();
 		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
 		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM))
+		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM))
 	}};
 	(L$s:expr) => {{
 		const STRING: &[u16] = $crate::wide!($s);
 		const LEN: usize = STRING.len();
 		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
 		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-		&$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
+		&$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
 	}};
 
 	($(let $name:ident = $s:expr;)*) => {$(
@@ -484,7 +539,7 @@ macro_rules! obfstr {
 			const LEN: usize = STRING.len();
 			const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
 			static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-			$crate::bytes::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
+			$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
 		};
 		let $name = $crate::unsafe_as_str(&$name);
 	)*};
@@ -494,7 +549,7 @@ macro_rules! obfstr {
 			const LEN: usize = STRING.len();
 			const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
 			static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-			$crate::words::deobfuscate::<LEN>(unsafe { &OBFSTRING }, &KEYSTREAM)
+			$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
 		};
 		let $name = &$name;
 	)*};
