@@ -7,6 +7,9 @@ Compiletime string constant obfuscation.
 
 use core::{char, fmt, ops, ptr, str};
 
+#[doc(hidden)]
+pub mod wide;
+
 //----------------------------------------------------------------
 
 /// Compiletime random number generator.
@@ -160,99 +163,6 @@ pub const fn position(haystack: &str, needle: &str) -> ops::Range<usize> {
 
 //----------------------------------------------------------------
 
-/// Wide string constant, returns an array of words.
-///
-/// The type of the returned constant is `&'static [u16; LEN]`.
-///
-/// ```
-/// let expected = &['W' as u16, 'i' as u16, 'd' as u16, 'e' as u16, 0];
-/// assert_eq!(obfstr::wide!("Wide\0"), expected);
-/// ```
-#[macro_export]
-macro_rules! wide {
-	($s:expr) => {{
-		const STRING: &str = $s;
-		const LEN: usize = $crate::wide_len(STRING);
-		const WIDE: [u16; LEN] = $crate::wide::<LEN>(STRING);
-		&WIDE
-	}};
-}
-
-#[doc(hidden)]
-pub const fn wide_len(s: &str) -> usize {
-	let s = s.as_bytes();
-	let mut len = 0usize;
-	let mut i = 0usize;
-	while i < s.len() {
-		let chr;
-		if s[i] & 0x80 == 0x00 {
-			chr = s[i] as u32;
-			i += 1;
-		}
-		else if s[i] & 0xe0 == 0xc0 {
-			chr = (s[i] as u32 & 0x1f) << 6 | (s[i + 1] as u32 & 0x3f);
-			i += 2;
-		}
-		else if s[i] & 0xf0 == 0xe0 {
-			chr = (s[i] as u32 & 0x0f) << 12 | (s[i + 1] as u32 & 0x3f) << 6 | (s[i + 2] as u32 & 0x3f);
-			i += 3;
-		}
-		else if s[i] & 0xf8 == 0xf0 {
-			chr = (s[i] as u32 & 0x07) << 18 | (s[i + 1] as u32 & 0x3f) << 12 | (s[i + 2] as u32 & 0x3f) << 6 | (s[i + 3] as u32 & 0x3f);
-			i += 4;
-		}
-		else {
-			// unimplemented!()
-			loop { }
-		};
-		len += if chr >= 0x10000 { 2 } else { 1 };
-	}
-	return len;
-}
-
-#[doc(hidden)]
-pub const fn wide<const LEN: usize>(s: &str) -> [u16; LEN] {
-	let s = s.as_bytes();
-	let mut data = [0u16; LEN];
-	let mut i = 0usize;
-	let mut j = 0usize;
-	while i < s.len() {
-		let chr;
-		if s[i] & 0x80 == 0x00 {
-			chr = s[i] as u32;
-			i += 1;
-		}
-		else if s[i] & 0xe0 == 0xc0 {
-			chr = (s[i] as u32 & 0x1f) << 6 | (s[i + 1] as u32 & 0x3f);
-			i += 2;
-		}
-		else if s[i] & 0xf0 == 0xe0 {
-			chr = (s[i] as u32 & 0x0f) << 12 | (s[i + 1] as u32 & 0x3f) << 6 | (s[i + 2] as u32 & 0x3f);
-			i += 3;
-		}
-		else if s[i] & 0xf8 == 0xf0 {
-			chr = (s[i] as u32 & 0x07) << 18 | (s[i + 1] as u32 & 0x3f) << 12 | (s[i + 2] as u32 & 0x3f) << 6 | (s[i + 3] as u32 & 0x3f);
-			i += 4;
-		}
-		else {
-			// unimplemented!()
-			loop { }
-		};
-		if chr >= 0x10000 {
-			data[j + 0] = (0xD800 + (chr - 0x10000) / 0x400) as u16;
-			data[j + 1] = (0xDC00 + (chr - 0x10000) % 0x400) as u16;
-			j += 2;
-		}
-		else {
-			data[j] = chr as u16;
-			j += 1;
-		}
-	}
-	return data;
-}
-
-//----------------------------------------------------------------
-
 /// Obfuscated string constant data.
 ///
 /// This type represents the data baked in the binary and holds the key and obfuscated string.
@@ -354,7 +264,7 @@ impl<const LEN: usize> ObfString<[u16; LEN]> {
 	#[doc(hidden)]
 	pub const fn obfuscate(key: u32, string: &str) -> ObfString<[u16; LEN]> {
 		let keys = self::words::keystream::<LEN>(key);
-		let string = wide::<LEN>(string);
+		let string = self::wide::encode::<LEN>(string);
 		let data = self::words::obfuscate::<LEN>(&string, &keys);
 		ObfString { key, data }
 	}
