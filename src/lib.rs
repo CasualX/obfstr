@@ -10,6 +10,12 @@ use core::{char, fmt, ops, ptr, str};
 #[doc(hidden)]
 pub mod wide;
 
+#[doc(hidden)]
+pub mod cfo;
+
+mod murmur3;
+pub use self::murmur3::murmur3;
+
 //----------------------------------------------------------------
 
 /// Compiletime random number generator.
@@ -303,6 +309,20 @@ impl<const LEN: usize> fmt::Debug for ObfBuffer<[u16; LEN]> {
 
 /// Obfuscates the xref to static data.
 ///
+/// ```
+/// static FOO: i32 = 42;
+/// let foo = obfstr::xref!(&FOO);
+///
+/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
+/// assert_eq!(foo as *const _, &FOO as *const _);
+/// ```
+#[macro_export]
+macro_rules! xref {
+	($e:expr) => { $crate::xref($e, $crate::random!(usize) & 0xffff) };
+}
+
+/// Obfuscates the xref to static data.
+///
 /// The offset can be initialized with [`random!`] for a compiletime random value.
 ///
 /// ```
@@ -323,6 +343,21 @@ pub fn xref<T: ?Sized>(p: &'static T, offset: usize) -> &'static T {
 		&*p
 	}
 }
+
+/// Obfuscates the xref to static data.
+///
+/// ```
+/// static mut FOO: i32 = 42;
+/// let foo = obfstr::xref_mut!(unsafe { &mut FOO });
+///
+/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
+/// assert_eq!(foo as *mut _, unsafe { &mut FOO } as *mut _);
+/// ```
+#[macro_export]
+macro_rules! xref_mut {
+	($e:expr) => { $crate::xref_mut($e, $crate::random!(usize) & 0xffff) };
+}
+
 /// Obfuscates the xref to static data.
 ///
 /// The offset can be initialized with [`random!`] for a compiletime random value.
