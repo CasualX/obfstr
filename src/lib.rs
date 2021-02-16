@@ -42,7 +42,7 @@ pub use self::murmur3::murmur3;
 /// ```
 #[macro_export]
 macro_rules! random {
-	($ty:ident) => {{ const ENTROPY: u64 = $crate::entropy(file!(), line!(), column!()); $crate::random!($ty, ENTROPY) }};
+	($ty:ident) => {{ const _RANDOM_ENTROPY: u64 = $crate::entropy(file!(), line!(), column!()); $crate::random!($ty, _RANDOM_ENTROPY) }};
 
 	(u8, $seed:expr) => { $seed as u8 };
 	(u16, $seed:expr) => { $seed as u16 };
@@ -98,7 +98,7 @@ pub const fn hash(s: &str) -> u32 {
 /// ```
 #[macro_export]
 macro_rules! hash {
-	($s:expr) => {{ const HASH: u32 = $crate::hash($s); HASH }};
+	($s:expr) => {{ const _DJB2_HASH: u32 = $crate::hash($s); _DJB2_HASH }};
 }
 
 /// Produces pseudorandom entropy given the file, line and column information.
@@ -127,10 +127,7 @@ pub const SEED: u64 = splitmix(hash(env!("OBFSTR_SEED")) as u64);
 /// ```
 #[macro_export]
 macro_rules! position {
-	($haystack:expr, $needle:expr) => {{
-		const POSITION: ::core::ops::Range<usize> = $crate::position($haystack, $needle);
-		POSITION
-	}};
+	($haystack:expr, $needle:expr) => {{ const _POSITION_RANGE: ::core::ops::Range<usize> = $crate::position($haystack, $needle); _POSITION_RANGE }};
 }
 
 /// Finds the position of the needle in the haystack at compiletime.
@@ -445,56 +442,56 @@ pub fn unsafe_as_str(bytes: &[u8]) -> &str {
 #[macro_export]
 macro_rules! obfstr {
 	($buf:ident <- $s:expr) => {{
-		const STRING: &str = $s;
-		const LEN: usize = STRING.len();
-		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
-		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-		let buf = &mut $buf[..LEN];
-		buf.copy_from_slice(&$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM));
+		const _OBFSTR_STRING: &str = $s;
+		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+		const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
+		let buf = &mut $buf[.._OBFSTR_LEN];
+		buf.copy_from_slice(&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM));
 		$crate::unsafe_as_str(buf)
 	}};
 	($buf:ident <- L$s:expr) => {{
-		const STRING: &[u16] = $crate::wide!($s);
-		const LEN: usize = STRING.len();
-		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
-		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-		let buf = &mut $buf[..LEN];
-		buf.copy_from_slice(&$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM));
+		const _OBFSTR_STRING: &[u16] = $crate::wide!($s);
+		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+		const _OBFSTR_KEYSTREAM: [u16; _OBFSTR_LEN] = $crate::words::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static mut _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
+		let buf = &mut $buf[.._OBFSTR_LEN];
+		buf.copy_from_slice(&$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM));
 		buf
 	}};
 
 	($s:expr) => {{
-		const STRING: &str = $s;
-		const LEN: usize = STRING.len();
-		const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
-		static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM))
+		const _OBFSTR_STRING: &str = $s;
+		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+		const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
+		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM))
 	}};
 	(L$s:expr) => {{
-		const STRING: &[u16] = $crate::wide!($s);
-		const LEN: usize = STRING.len();
-		const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
-		static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-		&$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
+		const _OBFSTR_STRING: &[u16] = $crate::wide!($s);
+		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+		const _OBFSTR_KEYSTREAM: [u16; _OBFSTR_LEN] = $crate::words::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static mut _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
+		&$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 	}};
 
 	($(let $name:ident = $s:expr;)*) => {$(
 		let $name = {
-			const STRING: &str = $s;
-			const LEN: usize = STRING.len();
-			const KEYSTREAM: [u8; LEN] = $crate::bytes::keystream::<LEN>($crate::random!(u32));
-			static mut OBFSTRING: [u8; LEN] = $crate::bytes::obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-			$crate::bytes::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
+			const _OBFSTR_STRING: &str = $s;
+			const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+			const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+			static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
+			$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 		};
 		let $name = $crate::unsafe_as_str(&$name);
 	)*};
 	($(let $name:ident = L$s:expr;)*) => {$(
 		let $name = {
-			const STRING: &[u16] = $crate::wide!($s);
-			const LEN: usize = STRING.len();
-			const KEYSTREAM: [u16; LEN] = $crate::words::keystream::<LEN>($crate::random!(u32));
-			static mut OBFSTRING: [u16; LEN] = $crate::words::obfuscate::<LEN>(STRING, &KEYSTREAM);
-			$crate::words::deobfuscate::<LEN>($crate::xref(unsafe { &OBFSTRING }, $crate::random!(usize) & 0xffff), &KEYSTREAM)
+			const _OBFSTR_STRING: &[u16] = $crate::wide!($s);
+			const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
+			const _OBFSTR_KEYSTREAM: [u16; _OBFSTR_LEN] = $crate::words::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+			static mut _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
+			$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 		};
 		let $name = &$name;
 	)*};

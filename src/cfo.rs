@@ -46,17 +46,19 @@ pub const fn generate<const LEN: usize>(mut key: u32, mut xor: u32, stmts: &[&'s
 macro_rules! obfstmt {
 	($($stmt:stmt;)*) => {{
 		// Initial KEY and XOR values
-		const KEY: u32 = $crate::random!(u32);
-		const XOR: u32 = $crate::murmur3(b"XOR", KEY);
+		const _OBFSTMT_KEY: u32 = $crate::random!(u32);
+		const _OBFSTMT_XOR: u32 = $crate::murmur3(b"XOR", _OBFSTMT_KEY);
 		// Count the number of statements
-		const COUNT: usize = <[&'static str]>::len(&[$(stringify!($stmt)),*]);
+		const _OBFSTMT_LEN: usize = <[&'static str]>::len(&[$(stringify!($stmt)),*]);
 		// Generate key and xor values of every statement and the final exit code
-		const STMTS: [(&'static str, u32, u32); COUNT] = $crate::cfo::generate::<{COUNT}>(KEY, XOR, &[$(stringify!($stmt)),*]);
-		const EXIT: u32 = if COUNT == 0 { KEY ^ XOR } else { STMTS[COUNT - 1].1 ^ STMTS[COUNT - 1].2 };
+		const _OBFSTMT_STMTS: [(&'static str, u32, u32); _OBFSTMT_LEN] =
+			$crate::cfo::generate::<{_OBFSTMT_LEN}>(_OBFSTMT_KEY, _OBFSTMT_XOR, &[$(stringify!($stmt)),*]);
+		const _OBFSTMT_EXIT: u32 = if _OBFSTMT_LEN == 0 { _OBFSTMT_KEY ^ _OBFSTMT_XOR }
+			else { _OBFSTMT_STMTS[_OBFSTMT_LEN - 1].1 ^ _OBFSTMT_STMTS[_OBFSTMT_LEN - 1].2 };
 		// Initialize the key and xor values
-		let mut key = KEY;
+		let mut key = _OBFSTMT_KEY;
 		#[allow(unused_mut)]
-		let mut xor = XOR;
+		let mut xor = _OBFSTMT_XOR;
 		loop {
 			$crate::obfstmt_match!(key, xor, 0usize, [$($stmt;)*], []);
 			key ^= xor;
@@ -74,12 +76,12 @@ macro_rules! obfstmt_match {
 			// Have to use match guard here because an expression isn't allowed in pattern position
 			// The result is still optimized to a binary search for the right key per block
 			$(
-				key if key == { STMTS[$i].1 } => {
+				key if key == { _OBFSTMT_STMTS[$i].1 } => {
 					$stmt
-					$xor = STMTS[$i].2;
+					$xor = _OBFSTMT_STMTS[$i].2;
 				},
 			)*
-			EXIT => break,
+			_OBFSTMT_EXIT => break,
 			_ => (),
 		}
 	};

@@ -6,8 +6,8 @@ Expose MurmurHash3, a keyed hash function. Not ready for public API.
 /// MurmurHash3 (32-bit variant) keyed hash function.
 #[macro_export]
 macro_rules! murmur3 {
-	($string:expr, $seed:expr) => {{ const HASH: u32 = $crate::murmur3($string, $seed); HASH }};
-	($string:expr) => {{ const HASH: u32 = $crate::murmur3($string, 0); HASH }};
+	($s:expr, $seed:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, $seed); _MURMUR3_HASH }};
+	($s:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, 0); _MURMUR3_HASH }};
 }
 
 #[doc(hidden)]
