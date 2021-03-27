@@ -2,7 +2,6 @@
 Compiletime string constant obfuscation.
 */
 
-#![feature(min_const_generics)]
 #![no_std]
 
 use core::{char, fmt, ops, ptr, str};

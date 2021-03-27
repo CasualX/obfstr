@@ -1,9 +1,6 @@
 use std::env;
 
 fn main() {
-	// "Forgive me, Father, for I have sinned"
-	println!("cargo:rustc-env=RUSTC_BOOTSTRAP=1");
-
 	// Accept external source of randomness
 	println!("cargo:rerun-if-env-changed=OBFSTR_SEED");
 
