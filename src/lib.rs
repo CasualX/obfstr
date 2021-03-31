@@ -4,7 +4,7 @@ Compiletime string constant obfuscation.
 
 #![cfg_attr(not(test), no_std)]
 
-use core::{char, fmt, ptr, str};
+use core::str;
 
 #[doc(hidden)]
 pub mod wide;
@@ -17,6 +17,9 @@ pub use self::murmur3::murmur3;
 
 mod pos;
 pub use self::pos::position;
+
+mod xref;
+pub use self::xref::{xref, xref_mut};
 
 //----------------------------------------------------------------
 
@@ -59,7 +62,8 @@ macro_rules! random {
 	(bool, $seed:expr) => { $seed as i64 >= 0 };
 	(f32, $seed:expr) => { f32::from_bits(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) };
 	(f64, $seed:expr) => { f64::from_bits(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) };
-	($_:ident, $seed:expr) => { compile_error!(concat!("unsupported type: ", stringify!($_))) };
+
+	($ty:ident, $seed:expr) => { compile_error!(concat!("unsupported type: ", stringify!($ty))) };
 }
 
 /// Compiletime bitmixing.
@@ -77,14 +81,14 @@ pub const fn splitmix(seed: u64) -> u64 {
 
 /// Compiletime string constant hash.
 ///
-/// Implemented using the [DJB2 hash function](http://www.cse.yorku.ca/~oz/hash.html#djb2).
+/// Implemented using the [DJB2 hash function](http://www.cse.yorku.ca/~oz/hash.html#djb2) xor variation.
 #[inline(always)]
 pub const fn hash(s: &str) -> u32 {
 	let s = s.as_bytes();
 	let mut result = 3581u32;
 	let mut i = 0usize;
 	while i < s.len() {
-		result = result.wrapping_mul(33).wrapping_add(s[i] as u32);
+		result = result.wrapping_mul(33) ^ s[i] as u32;
 		i += 1;
 	}
 	return result;
@@ -96,7 +100,7 @@ pub const fn hash(s: &str) -> u32 {
 ///
 /// ```
 /// const STRING: &str = "Hello World";
-/// assert_eq!(obfstr::hash!(STRING), 1481604729);
+/// assert_eq!(obfstr::hash!(STRING), 0x6E4A573D);
 /// ```
 #[macro_export]
 macro_rules! hash {
@@ -118,226 +122,11 @@ pub const SEED: u64 = splitmix(hash(env!("OBFSTR_SEED")) as u64);
 
 //----------------------------------------------------------------
 
-/// Obfuscated string constant data.
-///
-/// This type represents the data baked in the binary and holds the key and obfuscated string.
-#[doc(hidden)]
-#[repr(C)]
-pub struct ObfString<A> {
-	key: u32,
-	data: A,
-}
-
-/// Deobfuscated string buffer.
-#[doc(hidden)]
-#[repr(transparent)]
-pub struct ObfBuffer<A: ?Sized>(#[doc(hidden)] pub A);
-
-impl<A: ?Sized> AsRef<A> for ObfBuffer<A> {
-	#[inline]
-	fn as_ref(&self) -> &A {
-		&self.0
-	}
-}
-
-//----------------------------------------------------------------
-// Byte strings.
-
 #[doc(hidden)]
 pub mod bytes;
 
-impl<const LEN: usize> ObfString<[u8; LEN]> {
-	/// Obfuscates the string with the given key.
-	///
-	/// Do not call this function directly, use the provided macros instead.
-	#[doc(hidden)]
-	#[inline(always)]
-	pub const fn obfuscate(key: u32, s: &str) -> ObfString<[u8; LEN]> {
-		let keys = self::bytes::keystream::<LEN>(key);
-		let data = self::bytes::obfuscate::<LEN>(s.as_bytes(), &keys);
-		ObfString { key, data }
-	}
-	/// Deobfuscates the string and returns the buffer.
-	#[inline(always)]
-	pub fn deobfuscate(&self, _x: usize) -> ObfBuffer<[u8; LEN]> {
-		let keys = self::bytes::keystream::<LEN>(self.key);
-		let buffer = self::bytes::deobfuscate::<LEN>(&self.data, &keys);
-		ObfBuffer(buffer)
-	}
-}
-impl<const LEN: usize> PartialEq<&str> for ObfString<[u8; LEN]> {
-	#[inline(always)]
-	fn eq(&self, other: &&str) -> bool {
-		let keys = self::bytes::keystream::<LEN>(self.key);
-		self::bytes::equals::<LEN>(&self.data, &keys, other.as_bytes())
-	}
-}
-impl<const LEN: usize> PartialEq<ObfString<[u8; LEN]>> for &str {
-	#[inline(always)]
-	fn eq(&self, other: &ObfString<[u8; LEN]>) -> bool {
-		let keys = self::bytes::keystream::<LEN>(other.key);
-		self::bytes::equals::<LEN>(&other.data, &keys, self.as_bytes())
-	}
-}
-
-impl<const LEN: usize> ObfBuffer<[u8; LEN]> {
-	#[inline]
-	pub const fn as_slice(&self) -> &[u8] {
-		&self.0
-	}
-	#[inline]
-	pub fn as_str(&self) -> &str {
-		// This should be safe as it can only be constructed from a string constant...
-		#[cfg(debug_assertions)]
-		return str::from_utf8(&self.0).unwrap();
-		#[cfg(not(debug_assertions))]
-		return unsafe { str::from_utf8_unchecked(&self.0) };
-	}
-	// For use with serde's stupid 'static limitations...
-	#[cfg(feature = "unsafe_static_str")]
-	#[inline]
-	pub fn unsafe_as_static_str(&self) -> &'static str {
-		unsafe { &*(self.as_str() as *const str) }
-	}
-}
-impl<const LEN: usize> fmt::Debug for ObfBuffer<[u8; LEN]> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		self.as_str().fmt(f)
-	}
-}
-
-//----------------------------------------------------------------
-// Word strings.
-
 #[doc(hidden)]
 pub mod words;
-
-impl<const LEN: usize> ObfString<[u16; LEN]> {
-	/// Obfuscates the string with the given key.
-	///
-	/// Do not call this function directly, use the provided macros instead.
-	#[doc(hidden)]
-	pub const fn obfuscate(key: u32, string: &str) -> ObfString<[u16; LEN]> {
-		let keys = self::words::keystream::<LEN>(key);
-		let string = self::wide::encode::<LEN>(string);
-		let data = self::words::obfuscate::<LEN>(&string, &keys);
-		ObfString { key, data }
-	}
-	/// Deobfuscates the string and returns the buffer.
-	#[inline(always)]
-	pub fn deobfuscate(&self, _x: usize) -> ObfBuffer<[u16; LEN]> {
-		let keys = self::words::keystream::<LEN>(self.key);
-		let buffer = self::words::deobfuscate::<LEN>(&self.data, &keys);
-		ObfBuffer(buffer)
-	}
-}
-impl<const LEN: usize> fmt::Debug for ObfString<[u16; LEN]> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		self.deobfuscate(0).fmt(f)
-	}
-}
-
-impl<const LEN: usize> ObfBuffer<[u16; LEN]> {
-	#[inline]
-	pub const fn as_slice(&self) -> &[u16] {
-		&self.0
-	}
-}
-impl<const LEN: usize> fmt::Debug for ObfBuffer<[u16; LEN]> {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		use fmt::Write;
-		f.write_str("\"")?;
-		for chr in char::decode_utf16(self.as_slice().iter().cloned()) {
-			f.write_char(chr.unwrap_or(char::REPLACEMENT_CHARACTER))?;
-		}
-		f.write_str("\"")
-	}
-}
-
-//----------------------------------------------------------------
-
-/// Obfuscates the xref to static data.
-///
-/// ```
-/// static FOO: i32 = 42;
-/// let foo = obfstr::xref!(&FOO);
-///
-/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
-/// assert_eq!(foo as *const _, &FOO as *const _);
-/// ```
-#[macro_export]
-macro_rules! xref {
-	($e:expr) => { $crate::xref($e, $crate::random!(usize) & 0xffff) };
-}
-
-/// Obfuscates the xref to static data.
-///
-/// The offset can be initialized with [`random!`] for a compiletime random value.
-///
-/// ```
-/// static FOO: i32 = 42;
-/// let foo = obfstr::xref(&FOO, 0x123);
-///
-/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
-/// assert_eq!(foo as *const _, &FOO as *const _);
-/// ```
-#[inline(always)]
-pub fn xref<T: ?Sized>(p: &'static T, offset: usize) -> &'static T {
-	unsafe {
-		let mut p: *const T = p;
-		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = ptr::read_volatile(&(p as *const u8).wrapping_sub(offset)).wrapping_add(offset);
-		// set_ptr_value
-		*(&mut p as *mut *const T as *mut *const u8) = val;
-		&*p
-	}
-}
-
-/// Obfuscates the xref to static data.
-///
-/// ```
-/// static mut FOO: i32 = 42;
-/// let foo = obfstr::xref_mut!(unsafe { &mut FOO });
-///
-/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
-/// assert_eq!(foo as *mut _, unsafe { &mut FOO } as *mut _);
-/// ```
-#[macro_export]
-macro_rules! xref_mut {
-	($e:expr) => { $crate::xref_mut($e, $crate::random!(usize) & 0xffff) };
-}
-
-/// Obfuscates the xref to static data.
-///
-/// The offset can be initialized with [`random!`] for a compiletime random value.
-///
-/// ```
-/// static mut FOO: i32 = 42;
-/// let foo = obfstr::xref_mut(unsafe { &mut FOO }, 0x321);
-///
-/// // When looking at the disassembly the reference to `FOO` has been obfuscated.
-/// assert_eq!(foo as *mut _, unsafe { &mut FOO } as *mut _);
-/// ```
-#[inline(always)]
-pub fn xref_mut<T: ?Sized>(p: &'static mut T, offset: usize) -> &'static mut T {
-	unsafe {
-		let mut p: *mut T = p;
-		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = ptr::read_volatile(&(p as *mut u8).wrapping_sub(offset)).wrapping_add(offset);
-		// set_ptr_value
-		*(&mut p as *mut *mut T as *mut *mut u8) = val;
-		&mut *p
-	}
-}
-
-#[test]
-fn test_xref_slice() {
-	static FOO: [i32; 42] = [13; 42];
-	let foo = xref::<[i32]>(&FOO[..], 0x1000);
-	assert_eq!(foo as *const _, &FOO as *const _);
-}
-
-//----------------------------------------------------------------
 
 #[doc(hidden)]
 #[inline(always)]
@@ -416,15 +205,15 @@ macro_rules! obfstr {
 		const _OBFSTR_STRING: &str = $s;
 		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
 		const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
-		static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
-		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM))
+		static _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
+		$crate::unsafe_as_str(&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM))
 	}};
 	(L$s:expr) => {{
 		const _OBFSTR_STRING: &[u16] = $crate::wide!($s);
 		const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
 		const _OBFSTR_KEYSTREAM: [u16; _OBFSTR_LEN] = $crate::words::keystream::<_OBFSTR_LEN>($crate::random!(u32));
-		static mut _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
-		&$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
+		static _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
+		&$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 	}};
 
 	($(let $name:ident = $s:expr;)*) => {$(
@@ -432,8 +221,8 @@ macro_rules! obfstr {
 			const _OBFSTR_STRING: &str = $s;
 			const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
 			const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
-			static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
-			$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
+			static _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING.as_bytes(), &_OBFSTR_KEYSTREAM);
+			$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 		};
 		let $name = $crate::unsafe_as_str(&$name);
 	)*};
@@ -442,43 +231,11 @@ macro_rules! obfstr {
 			const _OBFSTR_STRING: &[u16] = $crate::wide!($s);
 			const _OBFSTR_LEN: usize = _OBFSTR_STRING.len();
 			const _OBFSTR_KEYSTREAM: [u16; _OBFSTR_LEN] = $crate::words::keystream::<_OBFSTR_LEN>($crate::random!(u32));
-			static mut _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
-			$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
+			static _OBFSTR_DATA: [u16; _OBFSTR_LEN] = $crate::words::obfuscate::<_OBFSTR_LEN>(_OBFSTR_STRING, &_OBFSTR_KEYSTREAM);
+			$crate::words::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
 		};
 		let $name = &$name;
 	)*};
-}
-
-// Backwards compatibility.
-//
-// Prefer `obfstr! { let name = "string"; }` which avoids leaking the `ObfBuffer` type.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! obflocal {
-	($s:expr) => { $crate::obfconst!($s).deobfuscate(0) };
-	(L$s:expr) => { $crate::obfconst!(L$s).deobfuscate(0) };
-}
-
-// Backwards compatibility.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! obfconst {
-	($s:expr) => {{ const STRING: $crate::ObfString<[u8; {$s.len()}]> = $crate::ObfString::<[u8; {$s.len()}]>::obfuscate($crate::random!(u32), $s); STRING }};
-	(L$s:expr) => {{ const STRING: $crate::ObfString<[u16; {$crate::wide_len($s)}]> = $crate::ObfString::<[u16; {$crate::wide_len($s)}]>::obfuscate($crate::random!(u32), $s); STRING }};
-}
-
-// Backwards compatibility.
-//
-// This macro was removed due to confusion of the order of arguments.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! obfeq {
-	($e:expr, $s:expr) => {
-		$e == $crate::obfconst!($s)
-	};
-	($e:expr, L$s:expr) => {
-		$e == $crate::obfstr!(L$s)
-	};
 }
 
 #[test]
@@ -510,12 +267,4 @@ fn test_obfstr_const() {
 
 	assert_eq!(obfstr!(L ABC), &[b'A' as u16, b'B' as u16, b'C' as u16]);
 	assert_eq!(obfstr!(L WORLD), &[0xd83c, 0xdf0d]);
-}
-
-#[test]
-fn test_obfconst_equals() {
-	const LONG_STRING: &str = "This literal is very very very long to see if it correctly handles long strings";
-
-	assert!(LONG_STRING == obfconst!(LONG_STRING));
-	assert!("Hello ðŸŒ" == obfconst!("Hello ðŸŒ"));
 }

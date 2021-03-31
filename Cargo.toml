@@ -1,6 +1,6 @@
 [package]
 name = "obfstr"
-version = "0.2.6"
+version = "0.3.0"
 edition = "2018"
 license = "MIT"
 
@@ -11,6 +11,3 @@ repository = "https://github.com/CasualX/obfstr"
 readme = "readme.md"
 keywords = ["obfuscation", "hash", "random", "wide"]
 categories = ["no-std"]
-
-[features]
-unsafe_static_str = []
