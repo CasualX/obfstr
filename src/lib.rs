@@ -238,33 +238,81 @@ macro_rules! obfstr {
 	)*};
 }
 
-#[test]
-fn test_obfstr_let() {
-	obfstr! {
-		let abc = "abc";
-		let def = "defdef";
-	}
-	assert_eq!(abc, "abc");
-	assert_eq!(def, "defdef");
-	obfstr! {
-		let hello = L"hello";
-		let world = L"world";
-	}
-	assert_eq!(hello, wide!("hello"));
-	assert_eq!(world, wide!("world"));
+#[macro_export]
+macro_rules! obfbytes {
+	($buf:ident <- $s:expr) => {{
+		const _OBFSTR_BYTES: &[u8] = $s;
+		const _OBFSTR_LEN: usize = _OBFSTR_BYTES.len();
+		const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static mut _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_BYTES, &_OBFSTR_KEYSTREAM);
+		let buf = &mut $buf[.._OBFSTR_LEN];
+		buf.copy_from_slice(&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(unsafe { &_OBFSTR_DATA }, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM));
+		buf
+	}};
+	($s:expr) => {{
+		const _OBFSTR_BYTES: &[u8] = $s;
+		const _OBFSTR_LEN: usize = _OBFSTR_BYTES.len();
+		const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+		static _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_BYTES, &_OBFSTR_KEYSTREAM);
+		&$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
+	}};
+    ($(let $name:ident = $s:expr;)*) => {$(
+		let $name = {
+			const _OBFSTR_BYTES: &[u8] = $s;
+			const _OBFSTR_LEN: usize = _OBFSTR_BYTES.len();
+			const _OBFSTR_KEYSTREAM: [u8; _OBFSTR_LEN] = $crate::bytes::keystream::<_OBFSTR_LEN>($crate::random!(u32));
+			static _OBFSTR_DATA: [u8; _OBFSTR_LEN] = $crate::bytes::obfuscate::<_OBFSTR_LEN>(_OBFSTR_BYTES, &_OBFSTR_KEYSTREAM);
+			$crate::bytes::deobfuscate::<_OBFSTR_LEN>($crate::xref(&_OBFSTR_DATA, $crate::random!(usize) & 0xffff), &_OBFSTR_KEYSTREAM)
+		};
+	)*};
 }
 
-#[test]
-fn test_obfstr_const() {
-	assert_eq!(obfstr!("\u{20}\0"), " \0");
-	assert_eq!(obfstr!("\"\n\t\\\'\""), "\"\n\t\\\'\"");
+#[cfg(test)]
+mod tests {
+	use super::*;
 
-	const LONG_STRING: &str = "This literal is very very very long to see if it correctly handles long strings";
-	assert_eq!(obfstr!(LONG_STRING), LONG_STRING);
+	#[test]
+    fn test_obfbytes_let() {
+        obfbytes! {
+			let abc = b"\x01\x02";
+		}
+        assert_eq!(&abc, b"\x01\x02");
+	}
 
-	const ABC: &str = "ABC";
-	const WORLD: &str = "🌍";
+    #[test]
+    fn test_obfbytes_const() {
+        assert_eq!(obfbytes!(b"\x01\xa9"), b"\x01\xa9");
+    }
 
-	assert_eq!(obfstr!(L ABC), &[b'A' as u16, b'B' as u16, b'C' as u16]);
-	assert_eq!(obfstr!(L WORLD), &[0xd83c, 0xdf0d]);
+    #[test]
+    fn test_obfstr_let() {
+        obfstr! {
+			let abc = "abc";
+			let def = "defdef";
+		}
+        assert_eq!(abc, "abc");
+        assert_eq!(def, "defdef");
+        obfstr! {
+			let hello = L"hello";
+			let world = L"world";
+		}
+        assert_eq!(hello, wide!("hello"));
+        assert_eq!(world, wide!("world"));
+    }
+
+    #[test]
+    fn test_obfstr_const() {
+        assert_eq!(obfstr!("\u{20}\0"), " \0");
+        assert_eq!(obfstr!("\"\n\t\\\'\""), "\"\n\t\\\'\"");
+
+        const LONG_STRING: &str = "This literal is very very very long to see if it correctly handles long strings";
+        assert_eq!(obfstr!(LONG_STRING), LONG_STRING);
+
+        const ABC: &str = "ABC";
+        const WORLD: &str = "🌍";
+
+        assert_eq!(obfstr!(L ABC), &[b'A' as u16, b'B' as u16, b'C' as u16]);
+        assert_eq!(obfstr!(L WORLD), &[0xd83c, 0xdf0d]);
+    }
 }
+
