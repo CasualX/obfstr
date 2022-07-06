@@ -32,23 +32,63 @@ pub use self::xref::{xref, xref_mut};
 ///
 /// While the result is generated at compiletime only the integer types are available in const contexts.
 ///
-/// Note that the seed _must_ be a uniformly distributed random `u64` value.
-/// If such a value is not available, see the [`splitmix`](fn.splitmix.html) function to generate it from non uniform random value.
-///
 /// ```
 /// const RND: i32 = obfstr::random!(u8) as i32;
 /// assert!(RND >= 0 && RND <= 255);
 /// ```
 ///
-/// The random machinery is robust enough that it avoids exact randomness when mixed with other macros:
+/// The behavior of the macro inside other macros can be surprising:
 ///
 /// ```
+/// // When used as top-level input to macros, random works as expected
 /// assert_ne!(obfstr::random!(u64), obfstr::random!(u64));
+///
+/// // When used inside the definition of a macro, random does not work as expected
+/// macro_rules! inside {
+/// 	() => {
+/// 		assert_eq!(obfstr::random!(u64), obfstr::random!(u64));
+/// 	};
+/// }
+/// inside!();
+///
+/// // When provided a unique seed, random works as expected
+/// // Note that the seeds must evaluate to a literal!
+/// macro_rules! seeded {
+/// 	() => {
+/// 		assert_ne!(obfstr::random!(u64, "lhs"), obfstr::random!(u64, "rhs"));
+/// 	};
+/// }
+/// seeded!();
+///
+/// // Repeated usage in macros, random does not work as expected
+/// macro_rules! repeated {
+/// 	($($name:ident),*) => {
+/// 		$(let $name = obfstr::random!(u64, "seed");)*
+/// 	};
+/// }
+/// repeated!(a, b);
+/// assert_eq!(a, b);
+///
+/// // Provide additional unique seeds, random works as expected
+/// macro_rules! repeated_seeded {
+/// 	($($name:ident),*) => {
+/// 		$(let $name = obfstr::random!(u64, "seed", stringify!($name));)*
+/// 	};
+/// }
+/// repeated_seeded!(c, d);
+/// assert_ne!(c, d);
 /// ```
 #[macro_export]
 macro_rules! random {
-	($ty:ident) => {{ const _RANDOM_ENTROPY: u64 = $crate::entropy(file!(), line!(), column!()); $crate::random!($ty, _RANDOM_ENTROPY) }};
+	($ty:ident $(, $seeds:expr)* $(,)?) => {{
+		const _RANDOM_ENTROPY: u64 = $crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*));
+		$crate::__random_cast!($ty, _RANDOM_ENTROPY)
+	}};
+}
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __random_cast {
 	(u8, $seed:expr) => { $seed as u8 };
 	(u16, $seed:expr) => { $seed as u16 };
 	(u32, $seed:expr) => { $seed as u32 };
@@ -110,8 +150,8 @@ macro_rules! hash {
 /// Produces pseudorandom entropy given the file, line and column information.
 #[doc(hidden)]
 #[inline(always)]
-pub const fn entropy(file: &str, line: u32, column: u32) -> u64 {
-	splitmix(splitmix(splitmix(SEED ^ hash(file) as u64) ^ line as u64) ^ column as u64)
+pub const fn entropy(string: &str) -> u64 {
+	splitmix(SEED ^ splitmix(hash(string) as u64))
 }
 
 /// Compiletime RNG seed.
