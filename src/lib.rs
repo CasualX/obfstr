@@ -118,7 +118,7 @@ pub const fn entropy(file: &str, line: u32, column: u32) -> u64 {
 ///
 /// This value is derived from the environment variable `OBFSTR_SEED` and has a fixed value if absent.
 /// If it changes all downstream dependents are recompiled automatically.
-pub const SEED: u64 = splitmix(hash(env!("OBFSTR_SEED")) as u64);
+pub const SEED: u64 = splitmix(hash(match option_env!("OBFSTR_SEED") { Some(seed) => seed, None => "FIXED" }) as u64);
 
 //----------------------------------------------------------------
 
