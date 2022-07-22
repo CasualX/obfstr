@@ -26,7 +26,7 @@ use core::{ops, str};
 /// ```
 #[macro_export]
 macro_rules! position {
-	($haystack:expr, $needle:expr) => {{ const POSITION: ::core::ops::Range<usize> = $crate::position($haystack, $needle); POSITION }};
+	($haystack:expr, $needle:expr) => {{ const _POSITION_RANGE: ::core::ops::Range<usize> = $crate::position($haystack, $needle); _POSITION_RANGE }};
 }
 
 /// Finds the position of the needle in the haystack at compiletime.
@@ -37,12 +37,13 @@ macro_rules! position {
 /// const POSITION: std::ops::Range<usize> = obfstr::position("haystack", "st");
 /// assert_eq!(POSITION, 3..5);
 /// ```
+#[doc(hidden)]
 #[inline(always)]
 pub const fn position(haystack: &str, needle: &str) -> ops::Range<usize> {
 	let start = search(haystack, needle);
 	// Panic if substring not found
 	if start < 0 {
-		let _ = haystack.as_bytes()[haystack.len()];
+		panic!("Needle not found in the haystack");
 	}
 	let start = start as usize;
 	start..start + needle.len()

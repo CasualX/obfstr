@@ -56,8 +56,7 @@ pub const fn keystream<const LEN: usize>(key: u32) -> [u8; LEN] {
 #[inline(always)]
 pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> [u8; LEN] {
 	if s.len() != LEN {
-		// panic!("input string len not equal to key stream len");
-		loop { }
+		panic!("input string len not equal to key stream len");
 	}
 	let mut data = [0u8; LEN];
 	let mut i = 0usize;

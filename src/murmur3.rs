@@ -2,16 +2,16 @@
 Expose MurmurHash3, a keyed hash function. Not ready for public API.
 */
 
-#[doc(hidden)]
 /// MurmurHash3 (32-bit variant) keyed hash function.
+#[doc(hidden)]
 #[macro_export]
 macro_rules! murmur3 {
 	($s:expr, $seed:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, $seed); _MURMUR3_HASH }};
 	($s:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, 0); _MURMUR3_HASH }};
 }
 
-#[doc(hidden)]
 /// MurmurHash3 (32-bit variant) keyed hash function.
+#[doc(hidden)]
 #[inline]
 pub const fn murmur3(s: &[u8], seed: u32) -> u32 {
 	let mut h = seed;
