@@ -5,6 +5,105 @@ Byte string obfuscation
 
 use core::ptr::{read_volatile, write};
 
+/// Compiletime string constant obfuscation.
+///
+/// The purpose of the obfuscation is to make it difficult to discover the original strings with automated analysis.
+/// String obfuscation is not intended to hinder a dedicated reverse engineer from discovering the original string.
+/// This should not be used to hide secrets in client binaries and the author disclaims any responsibility for any damages resulting from ignoring this warning.
+///
+/// The `obfstr!` macro returns the deobfuscated string as a temporary `&str` value and must be consumed in the same statement it was used:
+///
+/// ```
+/// use obfstr::obfstr;
+///
+/// const HELLO_WORLD: &str = "Hello 🌍";
+/// assert_eq!(obfstr!(HELLO_WORLD), HELLO_WORLD);
+/// ```
+///
+/// Different syntax forms are supported to reuse the obfuscated strings in outer scopes:
+///
+/// ```
+/// use obfstr::obfstr;
+///
+/// // Obfuscate a bunch of strings
+/// obfstr! {
+/// 	let s = "Hello world";
+/// 	let another = "another";
+/// }
+/// assert_eq!(s, "Hello world");
+/// assert_eq!(another, "another");
+///
+/// // Assign to an uninit variable in outer scope
+/// let (true_string, false_string);
+/// let string = if true {
+/// 	obfstr!(true_string = "true")
+/// }
+/// else {
+/// 	obfstr!(false_string = "false")
+/// };
+/// assert_eq!(string, "true");
+///
+/// // Return an obfuscated string from a function
+/// fn helper(buf: &mut [u8]) -> &str {
+/// 	obfstr!(buf <- "hello")
+/// }
+/// let mut buf = [0u8; 16];
+/// assert_eq!(helper(&mut buf), "hello");
+/// ```
+#[macro_export]
+macro_rules! obfstr {
+	($(let $name:ident = $s:expr;)*) => {$(
+		$crate::obfbytes! { let $name = $s.as_bytes(); }
+		let $name = $crate::unsafe_as_str($name);
+	)*};
+	($name:ident = $s:expr) => {
+		$crate::unsafe_as_str($crate::obfbytes!($name = $s.as_bytes()))
+	};
+	($buf:ident <- $s:expr) => {
+		$crate::unsafe_as_str($crate::obfbytes!($buf <- $s.as_bytes()))
+	};
+	($s:expr) => {
+		$crate::unsafe_as_str($crate::obfbytes!($s.as_bytes()))
+	};
+}
+
+/// Compiletime byte string obfuscation.
+#[macro_export]
+macro_rules! obfbytes {
+	($(let $name:ident = $s:expr;)*) => {
+		$(let ref $name = $crate::__obfbytes!($s);)*
+	};
+	($name:ident = $s:expr) => {{
+		$name = $crate::__obfbytes!($s);
+		&$name
+	}};
+	($buf:ident <- $s:expr) => {{
+		let buf = &mut $buf[..$s.len()];
+		buf.copy_from_slice(&$crate::__obfbytes!($s));
+		buf
+	}};
+	($s:expr) => {
+		&$crate::__obfbytes!($s)
+	};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __obfbytes {
+	($s:expr) => {{
+		const _OBFBYTES_STRING: &[u8] = $s;
+		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
+		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($e)));
+		static _OBFBYTES_SDATA: [u8; _OBFBYTES_LEN] = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
+		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
+			$crate::__xref!(
+				$crate::random!(usize, "offset", stringify!($e)),
+				$crate::random!(u64, "xref", stringify!($e)),
+				&_OBFBYTES_SDATA),
+			&_OBFBYTES_KEYSTREAM)
+	}};
+}
+
 // Simple XorShift to generate the key stream.
 // Security doesn't matter, we just want a number of random-looking bytes.
 #[inline(always)]
@@ -210,4 +309,29 @@ fn test_equals() {
 	const KEYSTREAM: [u8; LEN] = keystream::<LEN>(0x10203040);
 	const OBFSTRING: [u8; LEN] = obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
 	assert!(equals::<LEN>(&OBFSTRING, &KEYSTREAM, STRING.as_bytes()));
+}
+
+#[test]
+fn test_obfstr_let() {
+	obfstr! {
+		let abc = "abc";
+		let def = "defdef";
+	}
+	assert_eq!(abc, "abc");
+	assert_eq!(def, "defdef");
+}
+
+#[test]
+fn test_obfstr_const() {
+	assert_eq!(obfstr!("\u{20}\0"), " \0");
+	assert_eq!(obfstr!("\"\n\t\\\'\""), "\"\n\t\\\'\"");
+
+	const LONG_STRING: &str = "This literal is very very very long to see if it correctly handles long strings";
+	assert_eq!(obfstr!(LONG_STRING), LONG_STRING);
+
+	const ABC: &str = "ABC";
+	const WORLD: &str = "🌍";
+
+	assert_eq!(obfbytes!(ABC.as_bytes()), "ABC".as_bytes());
+	assert_eq!(obfbytes!(WORLD.as_bytes()), "🌍".as_bytes());
 }

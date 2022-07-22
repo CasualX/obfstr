@@ -3,6 +3,43 @@ Wide string obfuscation
 =======================
 */
 
+/// Compiletime wide string constant obfuscation.
+#[macro_export]
+macro_rules! obfwide {
+	($(let $name:ident = $s:expr;)*) => {
+		$(let ref $name = $crate::__obfwide!($s);)*
+	};
+	($name:ident = $s:expr) => {{
+		$name = $crate::__obfwide!($s);
+		&$name
+	}};
+	($buf:ident <- $s:expr) => {{
+		let buf = &mut $buf[..$s.len()];
+		buf.copy_from_slice(&$crate::__obfwide!($s));
+		buf
+	}};
+	($s:expr) => {
+		&$crate::__obfwide!($s)
+	};
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __obfwide {
+	($s:expr) => {{
+		const _OBFWIDE_STRING: &[u16] = $crate::wide!($s);
+		const _OBFWIDE_LEN: usize = _OBFWIDE_STRING.len();
+		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::random!(u32, "key", stringify!($e)));
+		static _OBFWIDE_SDATA: [u16; _OBFWIDE_LEN] = $crate::words::obfuscate::<_OBFWIDE_LEN>(_OBFWIDE_STRING, &_OBFWIDE_KEYSTREAM);
+		$crate::words::deobfuscate::<_OBFWIDE_LEN>(
+			$crate::__xref!(
+				$crate::random!(usize, "offset", stringify!($e)),
+				$crate::random!(u64, "xref", stringify!($e)),
+				&_OBFWIDE_SDATA),
+			&_OBFWIDE_KEYSTREAM)
+	}};
+}
+
 // Simple XorShift to generate the key stream.
 // Security doesn't matter, we just want a number of random-looking bytes.
 #[inline(always)]
@@ -116,4 +153,26 @@ fn test_remaining_bytes() {
 	test::<14>(0x7777);
 	test::<15>(0x8888);
 	test::<16>(0x9999);
+}
+
+#[test]
+fn test_obfstr_let() {
+	obfwide! {
+		let hello = "hello";
+		let world = "world";
+	}
+	assert_eq!(hello, crate::wide!("hello"));
+	assert_eq!(world, crate::wide!("world"));
+}
+
+#[test]
+fn test_obfstr_const() {
+	const LONG_STRING: &str = "This literal is very very very long to see if it correctly handles long strings";
+	assert_eq!(obfwide!(LONG_STRING), crate::wide!(LONG_STRING));
+
+	const ABC: &str = "ABC";
+	const WORLD: &str = "🌍";
+
+	assert_eq!(obfwide!(ABC), &[b'A' as u16, b'B' as u16, b'C' as u16]);
+	assert_eq!(obfwide!(WORLD), &[0xd83c, 0xdf0d]);
 }
