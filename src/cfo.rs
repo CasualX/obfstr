@@ -60,16 +60,16 @@ macro_rules! obfstmt {
 		#[allow(unused_mut)]
 		let mut xor = _OBFSTMT_XOR;
 		loop {
-			$crate::obfstmt_match!(key, xor, 0usize, [$($stmt;)*], []);
+			$crate::__obfstmt_match!(key, xor, 0usize, [$($stmt;)*], []);
 			key ^= xor;
 		}
 	}};
 }
 
-#[doc(hidden)]
 /// Generates the match statement for [`obfstmt!`].
+#[doc(hidden)]
 #[macro_export]
-macro_rules! obfstmt_match {
+macro_rules! __obfstmt_match {
 	// Terminating case, generate the code
 	($key:expr, $xor:expr, $x:expr, [], [$($i:expr, $stmt:stmt;)*]) => {
 		match $key {
@@ -87,7 +87,7 @@ macro_rules! obfstmt_match {
 	};
 	// Generate increasing indices for every stmt
 	($key:expr, $xor:expr, $x:expr, [$stmt1:stmt; $($tail:stmt;)*], [$($i:expr, $stmt2:stmt;)*]) => {
-		$crate::obfstmt_match!($key, $xor, $x + 1usize, [$($tail;)*], [$($i, $stmt2;)* $x, $stmt1; ])
+		$crate::__obfstmt_match!($key, $xor, $x + 1usize, [$($tail;)*], [$($i, $stmt2;)* $x, $stmt1; ])
 	};
 }
 
