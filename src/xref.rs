@@ -20,8 +20,7 @@ macro_rules! xref {
 macro_rules! __xref {
 	($offset:expr, $seed:expr, $e:expr) => {{
 		const _XREF_OFFSET: usize = $offset;
-		static mut _XREF_STATIC_MUT_OFFSET: usize = _XREF_OFFSET;
-		$crate::xref::xref::<_, _XREF_OFFSET, {$seed}>($e, unsafe { &mut _XREF_STATIC_MUT_OFFSET })
+		$crate::xref::xref::<_, _XREF_OFFSET, {$seed}>($e)
 	}};
 }
 
@@ -62,11 +61,15 @@ const fn obfuscate(mut v: usize, mut seed: u64) -> usize {
 
 /// Obfuscates the xref to static data.
 #[inline(always)]
-pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T, offset: &'static usize) -> &'static T {
+pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T) -> &'static T {
+	#[inline(never)]
+	fn get_offset<const OFFSET: usize>() -> usize {
+		OFFSET
+	}
 	unsafe {
 		let mut p: *const T = p;
 		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = ptr::read_volatile(&(p as *const u8).wrapping_sub(obfuscate(OFFSET, SEED))).wrapping_add(obfuscate(ptr::read_volatile(offset), SEED));
+		let val = ptr::read_volatile(&(p as *const u8).wrapping_sub(obfuscate(OFFSET, SEED))).wrapping_add(obfuscate(get_offset::<OFFSET>(), SEED));
 		// set_ptr_value
 		*(&mut p as *mut *const T as *mut *const u8) = val;
 		&*p
@@ -91,18 +94,21 @@ macro_rules! xref_mut {
 macro_rules! __xref_mut {
 	($offset:expr, $seed:expr, $e:expr) => {{
 		const _XREF_OFFSET: usize = $offset;
-		static mut _XREF_STATIC_MUT_OFFSET: usize = _XREF_OFFSET;
-		$crate::xref::xref_mut::<_, _XREF_OFFSET, {$seed}>($e, unsafe { &mut _XREF_STATIC_MUT_OFFSET })
+		$crate::xref::xref_mut::<_, _XREF_OFFSET, {$seed}>($e)
 	}};
 }
 
 /// Obfuscates the xref to static data.
 #[inline(always)]
-pub fn xref_mut<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static mut T, offset: &'static usize) -> &'static mut T {
+pub fn xref_mut<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static mut T) -> &'static mut T {
+	#[inline(never)]
+	fn get_offset<const OFFSET: usize>() -> usize {
+		OFFSET
+	}
 	unsafe {
 		let mut p: *mut T = p;
 		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = ptr::read_volatile(&(p as *mut u8).wrapping_sub(obfuscate(OFFSET, SEED))).wrapping_add(obfuscate(ptr::read_volatile(offset), SEED));
+		let val = ptr::read_volatile(&(p as *mut u8).wrapping_sub(obfuscate(OFFSET, SEED))).wrapping_add(obfuscate(get_offset::<OFFSET>(), SEED));
 		// set_ptr_value
 		*(&mut p as *mut *mut T as *mut *mut u8) = val;
 		&mut *p
