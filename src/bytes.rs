@@ -93,12 +93,12 @@ macro_rules! __obfbytes {
 	($s:expr) => {{
 		const _OBFBYTES_STRING: &[u8] = $s;
 		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
-		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($e)));
+		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
 		static _OBFBYTES_SDATA: [u8; _OBFBYTES_LEN] = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
 		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
 			$crate::__xref!(
-				$crate::random!(usize, "offset", stringify!($e)),
-				$crate::random!(u64, "xref", stringify!($e)),
+				$crate::__entropy!("offset", stringify!($s)) as usize,
+				$crate::__entropy!("xref", stringify!($s)),
 				&_OBFBYTES_SDATA),
 			&_OBFBYTES_KEYSTREAM)
 	}};
