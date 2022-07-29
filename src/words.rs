@@ -29,12 +29,12 @@ macro_rules! __obfwide {
 	($s:expr) => {{
 		const _OBFWIDE_STRING: &[u16] = $crate::wide!($s);
 		const _OBFWIDE_LEN: usize = _OBFWIDE_STRING.len();
-		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::random!(u32, "key", stringify!($e)));
+		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
 		static _OBFWIDE_SDATA: [u16; _OBFWIDE_LEN] = $crate::words::obfuscate::<_OBFWIDE_LEN>(_OBFWIDE_STRING, &_OBFWIDE_KEYSTREAM);
 		$crate::words::deobfuscate::<_OBFWIDE_LEN>(
 			$crate::__xref!(
-				$crate::random!(usize, "offset", stringify!($e)),
-				$crate::random!(u64, "xref", stringify!($e)),
+				$crate::__entropy!("offset", stringify!($s)) as usize,
+				$crate::__entropy!("xref", stringify!($s)),
 				&_OBFWIDE_SDATA),
 			&_OBFWIDE_KEYSTREAM)
 	}};

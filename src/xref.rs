@@ -12,7 +12,7 @@ use core::{hint, ptr};
 #[macro_export]
 macro_rules! xref {
 	($e:expr) => {
-		$crate::__xref!($crate::random!(usize, stringify!($e), 1), $crate::random!(u64, stringify!($e), 2), $e)
+		$crate::__xref!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e)
 	};
 }
 #[doc(hidden)]
@@ -84,7 +84,7 @@ pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T, offs
 /// ```
 #[macro_export]
 macro_rules! xref_mut {
-	($e:expr) => { $crate::__xref_mut!($crate::random!(usize, stringify!($e), 1), $crate::random!(u64, stringify!($e), 2), $e) };
+	($e:expr) => { $crate::__xref_mut!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e) };
 }
 #[doc(hidden)]
 #[macro_export]

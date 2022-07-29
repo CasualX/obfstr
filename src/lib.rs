@@ -147,11 +147,20 @@ macro_rules! hash {
 	($s:expr) => {{ const _DJB2_HASH: u32 = $crate::hash($s); _DJB2_HASH }};
 }
 
-/// Produces pseudorandom entropy given the file, line and column information.
+/// Produces pseudorandom entropy from the given string.
 #[doc(hidden)]
 #[inline(always)]
 pub const fn entropy(string: &str) -> u64 {
 	splitmix(SEED ^ splitmix(hash(string) as u64))
+}
+
+/// Produces pseudorandom entropy from the argument literals.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __entropy {
+	($($seeds:expr),* $(,)?) => {
+		$crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*))
+	};
 }
 
 /// Compiletime RNG seed.
