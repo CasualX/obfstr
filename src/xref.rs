@@ -1,6 +1,6 @@
 use core::hint;
 
-/// Obfuscates the xref to static data.
+/// Obfuscates the xref to data reference.
 ///
 /// ```
 /// static FOO: i32 = 42;
@@ -9,19 +9,26 @@ use core::hint;
 /// // When looking at the disassembly the reference to `FOO` has been obfuscated.
 /// assert_eq!(foo as *const _, &FOO as *const _);
 /// ```
+///
+/// This can be used for a more lightweight obfuscation that keeps that `'static` nature of string constants:
+///
+/// ```
+/// assert_eq!(obfstr::xref!("Hello world!"), "Hello world!");
+/// assert_eq!(obfstr::xref!(b"Byte array"), b"Byte array");
+/// ```
 #[macro_export]
 macro_rules! xref {
 	($e:expr) => {
 		$crate::__xref!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e)
 	};
 }
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __xref {
-	($offset:expr, $seed:expr, $e:expr) => {{
-		const _XREF_OFFSET: usize = $offset;
-		$crate::xref::xref::<_, _XREF_OFFSET, {$seed}>(::core::hint::black_box($e), ::core::hint::black_box(_XREF_OFFSET))
-	}};
+	($offset:expr, $seed:expr, $e:expr) => {
+		$crate::xref::xref::<_, {$offset}, {$seed}>($e)
+	};
 }
 
 #[inline(always)]
@@ -36,7 +43,7 @@ const fn obfchoice(v: usize, seed: u64) -> usize {
 		0 => v.wrapping_add(rand),
 		1 => rand.wrapping_sub(v),
 		2 => v ^ rand,
-		3 => v.rotate_left(non_zero(rand & 7) as u32),
+		3 => v ^ v.rotate_left(non_zero(rand & 7) as u32),
 		4 => !v,
 		5 => v ^ (v >> non_zero(rand & 31)),
 		6 => v.wrapping_mul(non_zero(rand)),
@@ -44,6 +51,7 @@ const fn obfchoice(v: usize, seed: u64) -> usize {
 		_ => unsafe { hint::unreachable_unchecked() }
 	}
 }
+
 #[inline(always)]
 const fn obfuscate<const SEED: u64>(mut v: usize) -> usize {
 	let mut seed = SEED;
@@ -60,20 +68,25 @@ const fn obfuscate<const SEED: u64>(mut v: usize) -> usize {
 	return obfchoice(v, seed & 0xffffffff00000000 | 3) & 0xffff
 }
 
-/// Obfuscates the xref to static data.
 #[inline(never)]
-pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T, offset: usize) -> &'static T {
+fn inner<const SEED: u64>(p: *const u8, offset: usize) -> *const u8 {
+	p.wrapping_add(obfuscate::<SEED>(offset))
+}
+
+/// Obfuscates the xref to data reference.
+#[inline(always)]
+pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T) -> &'static T {
 	unsafe {
 		let mut p: *const T = p;
-		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = (p as *const u8).wrapping_sub(obfuscate::<SEED>(OFFSET)).wrapping_add(obfuscate::<SEED>(offset));
+		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
+		let val = inner::<SEED>(hint::black_box((p as *const u8).wrapping_sub(obfuscate::<SEED>(OFFSET))), hint::black_box(OFFSET));
 		// set_ptr_value
 		*(&mut p as *mut *const T as *mut *const u8) = val;
 		&*p
 	}
 }
 
-/// Obfuscates the xref to static data.
+/// Obfuscates the xref to data reference.
 ///
 /// ```
 /// static mut FOO: i32 = 42;
@@ -84,24 +97,31 @@ pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T, offs
 /// ```
 #[macro_export]
 macro_rules! xref_mut {
-	($e:expr) => { $crate::__xref_mut!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e) };
+	($e:expr) => {
+		$crate::__xref_mut!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e)
+	};
 }
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __xref_mut {
-	($offset:expr, $seed:expr, $e:expr) => {{
-		const _XREF_OFFSET: usize = $offset;
-		$crate::xref::xref_mut::<_, _XREF_OFFSET, {$seed}>(::core::hint::black_box($e), ::core::hint::black_box(_XREF_OFFSET))
-	}};
+	($offset:expr, $seed:expr, $e:expr) => {
+		$crate::xref::xref_mut::<_, {$offset}, {$seed}>($e)
+	};
 }
 
-/// Obfuscates the xref to static data.
 #[inline(never)]
-pub fn xref_mut<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static mut T, offset: usize) -> &'static mut T {
+fn inner_mut<const SEED: u64>(p: *mut u8, offset: usize) -> *mut u8 {
+	p.wrapping_add(obfuscate::<SEED>(offset))
+}
+
+/// Obfuscates the xref to data reference.
+#[inline(always)]
+pub fn xref_mut<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static mut T) -> &'static mut T {
 	unsafe {
 		let mut p: *mut T = p;
-		// To avoid LLMV optimizing away the obfuscation, launder it through read_volatile
-		let val = (p as *mut u8).wrapping_sub(obfuscate::<SEED>(OFFSET)).wrapping_add(obfuscate::<SEED>(offset));
+		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
+		let val = inner_mut::<SEED>(hint::black_box((p as *mut u8).wrapping_sub(obfuscate::<SEED>(OFFSET))), hint::black_box(OFFSET));
 		// set_ptr_value
 		*(&mut p as *mut *mut T as *mut *mut u8) = val;
 		&mut *p
@@ -113,6 +133,8 @@ fn test_xref_slice() {
 	static FOO: [i32; 42] = [13; 42];
 	let foo = xref!(&FOO[..]);
 	assert_eq!(foo as *const _, &FOO as *const _);
+	assert_eq!(xref!("Hello world!"), "Hello world!");
+	assert_eq!(xref!(b"Byte array"), b"Byte array");
 }
 
 #[test]
