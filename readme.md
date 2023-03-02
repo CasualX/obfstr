@@ -12,6 +12,8 @@ The string constant itself is embedded in obfuscated form and deobfuscated local
 This reference to a temporary value must be used in the same statement it was generated.
 See the documentation for more advanced use cases.
 
+If you're looking for obfuscating format strings (`format!`, `println!`, etc.) I have another crate [`fmtools`](https://crates.io/crates/fmtools) with the optional dependency `obfstr` enabled to automatically apply string obfuscation to your formatting strings.
+
 Examples
 --------
 

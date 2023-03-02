@@ -40,7 +40,7 @@ fn obfstr() {
 
 #[inline(never)]
 fn xref() -> &'static i32 {
-	static FOO: i32 = 42;
+	static FOO: i32 = 3141592;
 	obfstr::xref!(&FOO)
 }
 
