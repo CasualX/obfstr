@@ -81,8 +81,9 @@ pub mod xref;
 #[macro_export]
 macro_rules! random {
 	($ty:ident $(, $seeds:expr)* $(,)?) => {{
-		const _RANDOM_ENTROPY: u64 = $crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*));
-		$crate::__random_cast!($ty, _RANDOM_ENTROPY)
+		const _ENTROPY: u64 = $crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*));
+		const _RANDOM: $ty = $crate::__random_cast!($ty, _ENTROPY);
+		_RANDOM
 	}};
 }
 
