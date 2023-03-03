@@ -30,11 +30,11 @@ pub mod xref;
 /// The integer types generate a random value in their respective range.  
 /// The float types generate a random value in range of `[1.0, 2.0)`.
 ///
-/// While the result is generated at compiletime only the integer types are available in const contexts.
-///
 /// ```
 /// const RND: i32 = obfstr::random!(u8) as i32;
 /// assert!(RND >= 0 && RND <= 255);
+/// # const _: f32 = obfstr::random!(f32);
+/// # const _: f64 = obfstr::random!(f64);
 /// ```
 ///
 /// The behavior of the macro inside other macros can be surprising:
@@ -100,10 +100,38 @@ macro_rules! __random_cast {
 	(i64, $seed:expr) => { $seed as i64 };
 	(isize, $seed:expr) => { $seed as isize };
 	(bool, $seed:expr) => { $seed as i64 >= 0 };
-	(f32, $seed:expr) => { f32::from_bits(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) };
-	(f64, $seed:expr) => { f64::from_bits(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) };
+
+	// {f32, f64}::from_bits is unstable as const fn due to issues with NaN
+	(f32, $seed:expr) => { unsafe { ::core::mem::transmute::<u32, f32>(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) } };
+	(f64, $seed:expr) => { unsafe { ::core::mem::transmute::<u64, f64>(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) } };
 
 	($ty:ident, $seed:expr) => { compile_error!(concat!("unsupported type: ", stringify!($ty))) };
+}
+
+#[test]
+fn test_random_f32() {
+	#[track_caller]
+	fn t(v: f32) {
+		assert!(v >= 1.0 && v < 2.0, "{}", v);
+	}
+	use random as r;
+	t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));
+	t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));
+	t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));
+	t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));t(r!(f32));
+}
+
+#[test]
+fn test_random_f64() {
+	#[track_caller]
+	fn t(v: f64) {
+		assert!(v >= 1.0 && v < 2.0, "{}", v);
+	}
+	use random as r;
+	t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));
+	t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));
+	t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));
+	t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));t(r!(f64));
 }
 
 /// Compiletime bitmixing.
