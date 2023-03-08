@@ -19,15 +19,9 @@ use core::hint;
 #[macro_export]
 macro_rules! xref {
 	($e:expr) => {
-		$crate::__xref!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e)
-	};
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __xref {
-	($offset:expr, $seed:expr, $e:expr) => {
-		$crate::xref::xref::<_, {$offset}, {$seed}>($e)
+		$crate::xref::xref::<_,
+			{$crate::__entropy!(stringify!($e), 1) as usize},
+			{$crate::__entropy!(stringify!($e), 2)}>($e)
 	};
 }
 
@@ -98,15 +92,9 @@ pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T) -> &
 #[macro_export]
 macro_rules! xref_mut {
 	($e:expr) => {
-		$crate::__xref_mut!($crate::__entropy!(stringify!($e), 1) as usize, $crate::__entropy!(stringify!($e), 2), $e)
-	};
-}
-
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __xref_mut {
-	($offset:expr, $seed:expr, $e:expr) => {
-		$crate::xref::xref_mut::<_, {$offset}, {$seed}>($e)
+		$crate::xref::xref_mut::<_,
+			{$crate::__entropy!(stringify!($e), 1) as usize},
+			{$crate::__entropy!(stringify!($e), 2)}>($e)
 	};
 }
 
