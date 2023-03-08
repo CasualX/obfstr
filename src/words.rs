@@ -32,10 +32,10 @@ macro_rules! __obfwide {
 		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
 		static _OBFWIDE_SDATA: [u16; _OBFWIDE_LEN] = $crate::words::obfuscate::<_OBFWIDE_LEN>(_OBFWIDE_STRING, &_OBFWIDE_KEYSTREAM);
 		$crate::words::deobfuscate::<_OBFWIDE_LEN>(
-			$crate::__xref!(
-				$crate::__entropy!("offset", stringify!($s)) as usize,
-				$crate::__entropy!("xref", stringify!($s)),
-				&_OBFWIDE_SDATA),
+			$crate::xref::xref::<_,
+				{$crate::__entropy!("offset", stringify!($s)) as usize},
+				{$crate::__entropy!("xref", stringify!($s))}>
+				(&_OBFWIDE_SDATA),
 			&_OBFWIDE_KEYSTREAM)
 	}};
 }

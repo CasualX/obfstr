@@ -14,19 +14,19 @@ use core::ptr::{read_volatile, write};
 /// The `obfstr!` macro returns the deobfuscated string as a temporary `&str` value and must be consumed in the same statement it was used:
 ///
 /// ```
-/// use obfstr::obfstr;
+/// use obfstr::obfstr as s;
 ///
 /// const HELLO_WORLD: &str = "Hello 🌍";
-/// assert_eq!(obfstr!(HELLO_WORLD), HELLO_WORLD);
+/// assert_eq!(s!(HELLO_WORLD), HELLO_WORLD);
 /// ```
 ///
 /// Different syntax forms are supported to reuse the obfuscated strings in outer scopes:
 ///
 /// ```
-/// use obfstr::obfstr;
+/// use obfstr::obfstr as s;
 ///
 /// // Obfuscate a bunch of strings
-/// obfstr! {
+/// s! {
 /// 	let s = "Hello world";
 /// 	let another = "another";
 /// }
@@ -36,16 +36,16 @@ use core::ptr::{read_volatile, write};
 /// // Assign to an uninit variable in outer scope
 /// let (true_string, false_string);
 /// let string = if true {
-/// 	obfstr!(true_string = "true")
+/// 	s!(true_string = "true")
 /// }
 /// else {
-/// 	obfstr!(false_string = "false")
+/// 	s!(false_string = "false")
 /// };
 /// assert_eq!(string, "true");
 ///
 /// // Return an obfuscated string from a function
 /// fn helper(buf: &mut [u8]) -> &str {
-/// 	obfstr!(buf <- "hello")
+/// 	s!(buf <- "hello")
 /// }
 /// let mut buf = [0u8; 16];
 /// assert_eq!(helper(&mut buf), "hello");
@@ -96,10 +96,10 @@ macro_rules! __obfbytes {
 		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
 		static _OBFBYTES_SDATA: [u8; _OBFBYTES_LEN] = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
 		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
-			$crate::__xref!(
-				$crate::__entropy!("offset", stringify!($s)) as usize,
-				$crate::__entropy!("xref", stringify!($s)),
-				&_OBFBYTES_SDATA),
+			$crate::xref::xref::<_,
+				{$crate::__entropy!("offset", stringify!($s)) as usize},
+				{$crate::__entropy!("xref", stringify!($s))}>
+				(&_OBFBYTES_SDATA),
 			&_OBFBYTES_KEYSTREAM)
 	}};
 }

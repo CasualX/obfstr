@@ -12,7 +12,7 @@ The string constant itself is embedded in obfuscated form and deobfuscated local
 This reference to a temporary value must be used in the same statement it was generated.
 See the documentation for more advanced use cases.
 
-If you're looking for obfuscating format strings (`format!`, `println!`, etc.) I have another crate [`fmtools`](https://crates.io/crates/fmtools) with the optional dependency `obfstr` enabled to automatically apply string obfuscation to your formatting strings.
+Looking for obfuscating formatting strings? See `fmtools` ([github](https://github.com/CasualX/fmtools), [crates.io](https://crates.io/crates/fmtools), [docs.rs](https://docs.rs/fmtools/0.1.2/fmtools/)) with the optional dependency `obfstr` enabled to automatically apply string obfuscation to formatting strings.
 
 Examples
 --------
@@ -20,7 +20,8 @@ Examples
 The `obfstr!` macro returns the deobfuscated string as a temporary value:
 
 ```rust
-assert_eq!(obfstr::obfstr!("Hello 🌍"), "Hello 🌍");
+use obfstr::obfstr as s;
+assert_eq!(s!("Hello 🌍"), "Hello 🌍");
 ```
 
 The `wide!` macro provides compiletime utf16 string constants:
