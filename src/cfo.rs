@@ -46,7 +46,7 @@ pub const fn generate<const LEN: usize>(mut key: u32, mut xor: u32, stmts: &[&'s
 macro_rules! obfstmt {
 	($($stmt:stmt;)*) => {{
 		// Initial KEY and XOR values
-		const _OBFSTMT_KEY: u32 = $crate::__entropy!(stringify!($($stmt;)*)) as u32;
+		const _OBFSTMT_KEY: u32 = $crate::random!(u32, stringify!($($stmt;)*));
 		const _OBFSTMT_XOR: u32 = $crate::murmur3(b"XOR", _OBFSTMT_KEY);
 		// Count the number of statements
 		const _OBFSTMT_LEN: usize = <[&'static str]>::len(&[$(stringify!($stmt)),*]);

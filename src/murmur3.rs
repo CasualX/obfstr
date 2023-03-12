@@ -14,7 +14,6 @@ macro_rules! murmur3 {
 
 /// MurmurHash3 (32-bit variant) keyed hash function.
 #[doc(hidden)]
-#[inline]
 pub const fn murmur3(string: &[u8], seed: u32) -> u32 {
 	let mut h = seed;
 	const C1: u32 = 0xcc9e2d51;
@@ -49,7 +48,7 @@ pub const fn murmur3(string: &[u8], seed: u32) -> u32 {
 	fmix32(h ^ string.len() as u32)
 }
 
-#[inline]
+#[inline(always)]
 const fn fmix32(mut h: u32) -> u32 {
 	h ^= h >> 16;
 	h = h.wrapping_mul(0x85ebca6b);

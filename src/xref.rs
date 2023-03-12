@@ -20,24 +20,24 @@ use core::hint;
 macro_rules! xref {
 	($e:expr) => {
 		$crate::xref::xref::<_,
-			{$crate::__entropy!(stringify!($e), 1) as usize},
-			{$crate::__entropy!(stringify!($e), 2)}>($e)
+			{$crate::random!(u32, stringify!($e), "OFFSET")},
+			{$crate::random!(u64, stringify!($e), "SEED")}>($e)
 	};
 }
 
 #[inline(always)]
-const fn non_zero(rand: usize) -> usize {
+const fn non_zero(rand: u32) -> u32 {
 	if rand == 0 { 1 } else { rand }
 }
 
 #[inline(always)]
-const fn obfchoice(v: usize, seed: u64) -> usize {
-	let rand = (seed >> 32) as i32 as usize;
+const fn obfchoice(v: u32, seed: u64) -> u32 {
+	let rand = (seed >> 32) as u32;
 	match seed & 7 {
 		0 => v.wrapping_add(rand),
 		1 => rand.wrapping_sub(v),
 		2 => v ^ rand,
-		3 => v ^ v.rotate_left(non_zero(rand & 7) as u32),
+		3 => v ^ v.rotate_left(non_zero(rand & 7)),
 		4 => !v,
 		5 => v ^ (v >> non_zero(rand & 31)),
 		6 => v.wrapping_mul(non_zero(rand)),
@@ -47,7 +47,7 @@ const fn obfchoice(v: usize, seed: u64) -> usize {
 }
 
 #[inline(always)]
-const fn obfuscate<const SEED: u64>(mut v: usize) -> usize {
+const fn obfuscate<const SEED: u64>(mut v: u32) -> usize {
 	let mut seed = SEED;
 	use crate::splitmix;
 	seed = splitmix(seed);
@@ -59,17 +59,18 @@ const fn obfuscate<const SEED: u64>(mut v: usize) -> usize {
 	seed = splitmix(seed);
 	v = obfchoice(v, seed);
 	seed = splitmix(seed);
-	return obfchoice(v, seed & 0xffffffff00000000 | 3) & 0xffff
+	v = obfchoice(v, seed);
+	return (v & 0xffff) as usize
 }
 
 #[inline(never)]
-fn inner<const SEED: u64>(p: *const u8, offset: usize) -> *const u8 {
+fn inner<const SEED: u64>(p: *const u8, offset: u32) -> *const u8 {
 	p.wrapping_add(obfuscate::<SEED>(offset))
 }
 
 /// Obfuscates the xref to data reference.
 #[inline(always)]
-pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T) -> &'static T {
+pub fn xref<T: ?Sized, const OFFSET: u32, const SEED: u64>(p: &'static T) -> &'static T {
 	unsafe {
 		let mut p: *const T = p;
 		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
@@ -93,19 +94,19 @@ pub fn xref<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static T) -> &
 macro_rules! xref_mut {
 	($e:expr) => {
 		$crate::xref::xref_mut::<_,
-			{$crate::__entropy!(stringify!($e), 1) as usize},
-			{$crate::__entropy!(stringify!($e), 2)}>($e)
+			{$crate::random!(u32, stringify!($e), "OFFSET")},
+			{$crate::random!(u64, stringify!($e), "SEED")}>($e)
 	};
 }
 
 #[inline(never)]
-fn inner_mut<const SEED: u64>(p: *mut u8, offset: usize) -> *mut u8 {
+fn inner_mut<const SEED: u64>(p: *mut u8, offset: u32) -> *mut u8 {
 	p.wrapping_add(obfuscate::<SEED>(offset))
 }
 
 /// Obfuscates the xref to data reference.
 #[inline(always)]
-pub fn xref_mut<T: ?Sized, const OFFSET: usize, const SEED: u64>(p: &'static mut T) -> &'static mut T {
+pub fn xref_mut<T: ?Sized, const OFFSET: u32, const SEED: u64>(p: &'static mut T) -> &'static mut T {
 	unsafe {
 		let mut p: *mut T = p;
 		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
@@ -128,6 +129,6 @@ fn test_xref_slice() {
 #[test]
 fn regression1() {
 	// Caused by `v = v ^ (v >> RNG)` when RNG is zero to always be zero
-	let v = obfuscate::<{(-4272872662024917058i64) as u64}>(4898264233338431333usize);
+	let v = obfuscate::<0xC4B3B4F3D986EFBEu64>(0x3C236765u32);
 	assert_ne!(v, 0);
 }
