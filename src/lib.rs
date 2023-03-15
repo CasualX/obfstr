@@ -81,8 +81,8 @@ pub mod xref;
 #[macro_export]
 macro_rules! random {
 	($ty:ident $(, $seeds:expr)* $(,)?) => {{
-		const _ENTROPY: u64 = $crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*));
-		const _RANDOM: $ty = $crate::__random_cast!($ty, _ENTROPY);
+		const _RANDOM: $ty = $crate::__random_cast!($ty,
+			$crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*)));
 		_RANDOM
 	}};
 }
@@ -93,7 +93,7 @@ macro_rules! __random_cast {
 	(u8, $seed:expr) => { $seed as u8 };
 	(u16, $seed:expr) => { $seed as u16 };
 	(u32, $seed:expr) => { $seed as u32 };
-	(u64, $seed:expr) => { $seed as u64 };
+	(u64, $seed:expr) => { $seed };
 	(usize, $seed:expr) => { $seed as usize };
 	(i8, $seed:expr) => { $seed as i8 };
 	(i16, $seed:expr) => { $seed as i16 };
@@ -181,15 +181,6 @@ macro_rules! hash {
 #[inline(always)]
 pub const fn entropy(string: &str) -> u64 {
 	splitmix(SEED ^ splitmix(hash(string) as u64))
-}
-
-/// Produces pseudorandom entropy from the argument literals.
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __entropy {
-	($($seeds:expr),* $(,)?) => {
-		$crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*))
-	};
 }
 
 /// Compiletime RNG seed.

@@ -3,6 +3,8 @@ Wide string obfuscation
 =======================
 */
 
+use core::ptr::{read_volatile, write};
+
 /// Compiletime wide string constant obfuscation.
 #[macro_export]
 macro_rules! obfwide {
@@ -29,12 +31,12 @@ macro_rules! __obfwide {
 	($s:expr) => {{
 		const _OBFWIDE_STRING: &[u16] = $crate::wide!($s);
 		const _OBFWIDE_LEN: usize = _OBFWIDE_STRING.len();
-		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
+		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::random!(u32, "key", stringify!($s)));
 		static _OBFWIDE_SDATA: [u16; _OBFWIDE_LEN] = $crate::words::obfuscate::<_OBFWIDE_LEN>(_OBFWIDE_STRING, &_OBFWIDE_KEYSTREAM);
 		$crate::words::deobfuscate::<_OBFWIDE_LEN>(
 			$crate::xref::xref::<_,
-				{$crate::__entropy!("offset", stringify!($s)) as usize},
-				{$crate::__entropy!("xref", stringify!($s))}>
+				{$crate::random!(u32, "offset", stringify!($s))},
+				{$crate::random!(u64, "xref", stringify!($s))}>
 				(&_OBFWIDE_SDATA),
 			&_OBFWIDE_KEYSTREAM)
 	}};
@@ -47,7 +49,7 @@ const fn next_round(mut x: u32) -> u32 {
 	x ^= x << 13;
 	x ^= x >> 17;
 	x ^= x << 5;
-	x
+	return x;
 }
 
 /// Generate the key stream for array of given length.
@@ -69,7 +71,7 @@ pub const fn keystream<const LEN: usize>(key: u32) -> [u16; LEN] {
 		round_key = next_round(round_key);
 		keys[i] = round_key as u16;
 	}
-	keys
+	return keys;
 }
 
 /// Obfuscates the input string and given key stream.
@@ -83,22 +85,21 @@ pub const fn obfuscate<const LEN: usize>(s: &[u16], k: &[u16; LEN]) -> [u16; LEN
 		data[i] = s[i] ^ k[i];
 		i += 1;
 	}
-	data
+	return data;
 }
 
 /// Deobfuscates the obfuscated input string and given key stream.
 #[inline(always)]
 pub fn deobfuscate<const LEN: usize>(s: &[u16; LEN], k: &[u16; LEN]) -> [u16; LEN] {
-	let mut buffer = [0u16; LEN];
+	let mut buf = [0u16; LEN];
 	let mut i = 0;
 	// Try to tickle the LLVM optimizer in _just_ the right way
 	// Use `read_volatile` to avoid constant folding a specific read and optimize the rest
 	// Volatile reads of any size larger than 8 bytes appears to cause a bunch of one byte reads
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
-		use ::core::ptr::{read_volatile, write};
 		let src = s.as_ptr();
-		let dest = buffer.as_mut_ptr();
+		let dest = buf.as_mut_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !3 {
@@ -128,7 +129,7 @@ pub fn deobfuscate<const LEN: usize>(s: &[u16; LEN], k: &[u16; LEN]) -> [u16; LE
 			write(dest.offset(i as isize), ct ^ k[i]);
 		}
 	}
-	buffer
+	return buf;
 }
 
 // Test correct processing of less than multiple of 8 lengths

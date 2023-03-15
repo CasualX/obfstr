@@ -93,12 +93,12 @@ macro_rules! __obfbytes {
 	($s:expr) => {{
 		const _OBFBYTES_STRING: &[u8] = $s;
 		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
-		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::__entropy!("key", stringify!($s)) as u32);
+		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($s)));
 		static _OBFBYTES_SDATA: [u8; _OBFBYTES_LEN] = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
 		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
 			$crate::xref::xref::<_,
-				{$crate::__entropy!("offset", stringify!($s)) as usize},
-				{$crate::__entropy!("xref", stringify!($s))}>
+				{$crate::random!(u32, "offset", stringify!($s))},
+				{$crate::random!(u64, "xref", stringify!($s))}>
 				(&_OBFBYTES_SDATA),
 			&_OBFBYTES_KEYSTREAM)
 	}};
@@ -111,7 +111,7 @@ const fn next_round(mut x: u32) -> u32 {
 	x ^= x << 13;
 	x ^= x >> 17;
 	x ^= x << 5;
-	x
+	return x;
 }
 
 /// Generate the key stream for array of given length.
@@ -148,7 +148,7 @@ pub const fn keystream<const LEN: usize>(key: u32) -> [u8; LEN] {
 		},
 		_ => (),
 	}
-	keys
+	return keys;
 }
 
 /// Obfuscates the input string and given key stream.
@@ -163,13 +163,13 @@ pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> [u8; LEN] {
 		data[i] = s[i] ^ k[i];
 		i += 1;
 	}
-	data
+	return data;
 }
 
 /// Deobfuscates the obfuscated input string and given key stream.
 #[inline(always)]
 pub fn deobfuscate<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN]) -> [u8; LEN] {
-	let mut buffer = [0u8; LEN];
+	let mut buf = [0u8; LEN];
 	let mut i = 0;
 	// Try to tickle the LLVM optimizer in _just_ the right way
 	// Use `read_volatile` to avoid constant folding a specific read and optimize the rest
@@ -177,7 +177,7 @@ pub fn deobfuscate<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN]) -> [u8; LEN] 
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
 		let src = s.as_ptr();
-		let dest = buffer.as_mut_ptr();
+		let dest = buf.as_mut_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !7 {
@@ -219,7 +219,7 @@ pub fn deobfuscate<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN]) -> [u8; LEN] 
 			_ => (),
 		}
 	}
-	buffer
+	return buf;
 }
 
 #[inline(always)]
