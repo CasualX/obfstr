@@ -4,7 +4,7 @@ The example presented here uses an enum because it can be challenging to return 
  */
 
 use std::fmt;
-use obfstr::{obfstr, position};
+use obfstr::{obfstr, obfstring, position};
 
 // Let's try to obfuscate the string representation of this enum.
 pub enum Example {
@@ -17,9 +17,9 @@ impl Example {
 	// Returns an owned String but this allocates memory.
 	pub fn to_str1(&self) -> String {
 		match self {
-			Example::Foo => String::from(obfstr!("Foo")),
-			Example::Bar => String::from(obfstr!("Bar")),
-			Example::Baz => String::from(obfstr!("Baz")),
+			Example::Foo => obfstring!("Foo"),
+			Example::Bar => obfstring!("Bar"),
+			Example::Baz => obfstring!("Baz"),
 		}
 	}
 
