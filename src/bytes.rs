@@ -67,6 +67,18 @@ macro_rules! obfstr {
 	};
 }
 
+/// Compiletime string constant obfuscation.
+///
+/// Returns an owned `String` instead of a temporary `&str`.
+///
+/// See [`obfstr!`] for more information.
+#[macro_export]
+macro_rules! obfstring {
+	($s:expr) => {
+		String::from($crate::obfstr!($s))
+	};
+}
+
 /// Compiletime byte string obfuscation.
 #[macro_export]
 macro_rules! obfbytes {
