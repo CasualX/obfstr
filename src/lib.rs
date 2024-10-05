@@ -5,6 +5,7 @@ Compiletime string constant obfuscation.
 #![cfg_attr(not(test), no_std)]
 
 use core::str;
+use core::ffi::CStr;
 
 #[doc(hidden)]
 pub mod wide;
@@ -199,10 +200,20 @@ pub mod words;
 
 #[doc(hidden)]
 #[inline(always)]
-pub fn unsafe_as_str(bytes: &[u8]) -> &str {
+pub const fn unsafe_as_str(bytes: &[u8]) -> &str {
 	// When used correctly by this crate's macros this should be safe
 	#[cfg(debug_assertions)]
-	return str::from_utf8(bytes).unwrap();
+	return match str::from_utf8(bytes) { Ok(s) => s, Err(_) => panic!("invalid str") };
 	#[cfg(not(debug_assertions))]
 	return unsafe { str::from_utf8_unchecked(bytes) };
+}
+
+#[doc(hidden)]
+#[inline(always)]
+pub const fn unsafe_as_cstr(bytes: &[u8]) -> &CStr {
+	// When used correctly by this crate's macros this should be safe
+	#[cfg(debug_assertions)]
+	return match CStr::from_bytes_with_nul(bytes) { Ok(cstr) => cstr, Err(_) => panic!("invalid cstr") };
+	#[cfg(not(debug_assertions))]
+	return unsafe { CStr::from_bytes_with_nul_unchecked(bytes) };
 }

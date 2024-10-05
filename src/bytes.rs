@@ -67,6 +67,34 @@ macro_rules! obfstr {
 	};
 }
 
+/// Compiletime cstr constant obfuscation.
+///
+/// See [`obfstr!`] for more information.
+///
+/// ```
+/// use std::ffi::CStr;
+/// use obfstr::obfcstr as cstr;
+///
+/// const HELLO_WORLD: &'static CStr = c"Hello CStr";
+/// assert_eq!(cstr!(HELLO_WORLD).to_str().unwrap(), "Hello CStr");
+/// ```
+#[macro_export]
+macro_rules! obfcstr {
+	($(let $name:ident = $s:expr;)*) => {$(
+		$crate::obfbytes! { let $name = ::core::ffi::CStr::to_bytes_with_nul($s); }
+		let $name = $crate::unsafe_as_cstr($name);
+	)*};
+	($name:ident = $s:expr) => {
+		$crate::unsafe_as_cstr($crate::obfbytes!($name = ::core::ffi::CStr::to_bytes_with_nul($s)))
+	};
+	($buf:ident <- $s:expr) => {
+		$crate::unsafe_as_cstr($crate::obfbytes!($buf <- ::core::ffi::CStr::to_bytes_with_nul($s)))
+	};
+	($s:expr) => {
+		$crate::unsafe_as_cstr($crate::obfbytes!(::core::ffi::CStr::to_bytes_with_nul($s)))
+	};
+}
+
 /// Compiletime string constant obfuscation.
 ///
 /// Returns an owned `String` instead of a temporary `&str`.
