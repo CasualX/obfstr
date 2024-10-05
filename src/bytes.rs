@@ -53,17 +53,17 @@ use core::ptr::{read_volatile, write};
 #[macro_export]
 macro_rules! obfstr {
 	($(let $name:ident = $s:expr;)*) => {$(
-		$crate::obfbytes! { let $name = $s.as_bytes(); }
+		$crate::obfbytes! { let $name = ::core::convert::identity::<&str>($s).as_bytes(); }
 		let $name = $crate::unsafe_as_str($name);
 	)*};
 	($name:ident = $s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!($name = $s.as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!($name = ::core::convert::identity::<&str>($s).as_bytes()))
 	};
 	($buf:ident <- $s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!($buf <- $s.as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!($buf <- ::core::convert::identity::<&str>($s).as_bytes()))
 	};
 	($s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!($s.as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!(::core::convert::identity::<&str>($s).as_bytes()))
 	};
 }
 
