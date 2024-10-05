@@ -26,7 +26,7 @@ use core::{ops, str};
 /// ```
 #[macro_export]
 macro_rules! position {
-	($haystack:expr, $needle:expr) => {{ const _POSITION_RANGE: ::core::ops::Range<usize> = $crate::position($haystack, $needle); _POSITION_RANGE }};
+	($haystack:expr, $needle:expr) => { const { $crate::position($haystack, $needle) } };
 }
 
 /// Finds the position of the needle in the haystack at compiletime.

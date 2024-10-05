@@ -81,11 +81,7 @@ pub mod xref;
 /// ```
 #[macro_export]
 macro_rules! random {
-	($ty:ident $(, $seeds:expr)* $(,)?) => {{
-		const _RANDOM: $ty = $crate::__random_cast!($ty,
-			$crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*)));
-		_RANDOM
-	}};
+	($ty:ident $(, $seeds:expr)* $(,)?) => { const { $crate::__random_cast!($ty, $crate::entropy(concat!(file!(), ":", line!(), ":", column!() $(, ":", $seeds)*))) }};
 }
 
 #[doc(hidden)]
@@ -174,7 +170,7 @@ pub const fn hash(s: &str) -> u32 {
 /// ```
 #[macro_export]
 macro_rules! hash {
-	($s:expr) => {{ const _DJB2_HASH: u32 = $crate::hash($s); _DJB2_HASH }};
+	($s:expr) => { const { $crate::hash($s) } };
 }
 
 /// Produces pseudorandom entropy from the given string.
