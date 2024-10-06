@@ -53,17 +53,17 @@ use core::ptr::{read_volatile, write};
 #[macro_export]
 macro_rules! obfstr {
 	($(let $name:ident = $s:expr;)*) => {$(
-		$crate::obfbytes! { let $name = ::core::convert::identity::<&str>($s).as_bytes(); }
+		$crate::obfbytes! { let $name = ::core::primitive::str::as_bytes($s); }
 		let $name = $crate::unsafe_as_str($name);
 	)*};
 	($name:ident = $s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!($name = ::core::convert::identity::<&str>($s).as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!($name = ::core::primitive::str::as_bytes($s)))
 	};
 	($buf:ident <- $s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!($buf <- ::core::convert::identity::<&str>($s).as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!($buf <- ::core::primitive::str::as_bytes($s)))
 	};
 	($s:expr) => {
-		$crate::unsafe_as_str($crate::obfbytes!(::core::convert::identity::<&str>($s).as_bytes()))
+		$crate::unsafe_as_str($crate::obfbytes!(::core::primitive::str::as_bytes($s)))
 	};
 }
 
@@ -131,6 +131,7 @@ macro_rules! obfbytes {
 #[macro_export]
 macro_rules! __obfbytes {
 	($s:expr) => {{
+		use ::core::primitive::*;
 		const _OBFBYTES_STRING: &[u8] = $s;
 		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
 		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($s)));

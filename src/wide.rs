@@ -12,6 +12,7 @@
 #[macro_export]
 macro_rules! wide {
 	($s:expr) => {{
+		use ::core::primitive::*;
 		const _WIDE_STRING: &str = $s;
 		const _WIDE_LEN: usize = $crate::wide::len(_WIDE_STRING);
 		const _WIDE_WORDS: [u16; _WIDE_LEN] = $crate::wide::encode::<_WIDE_LEN>(_WIDE_STRING);
