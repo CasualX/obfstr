@@ -29,6 +29,7 @@ macro_rules! obfwide {
 #[macro_export]
 macro_rules! __obfwide {
 	($s:expr) => {{
+		use ::core::primitive::*;
 		const _OBFWIDE_STRING: &[u16] = $crate::wide!($s);
 		const _OBFWIDE_LEN: usize = _OBFWIDE_STRING.len();
 		const _OBFWIDE_KEYSTREAM: [u16; _OBFWIDE_LEN] = $crate::words::keystream::<_OBFWIDE_LEN>($crate::random!(u32, "key", stringify!($s)));
