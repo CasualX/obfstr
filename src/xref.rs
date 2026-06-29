@@ -86,10 +86,10 @@ pub fn xref<T: ?Sized, const OFFSET: u32, const SEED: u64>(p: &'static T) -> &'s
 ///
 /// ```
 /// static mut FOO: i32 = 42;
-/// let foo = obfstr::xref_mut!(unsafe { &mut FOO });
+/// let foo = obfstr::xref_mut!(unsafe { &mut *(&raw mut FOO) });
 ///
 /// // When looking at the disassembly the reference to `FOO` has been obfuscated.
-/// assert_eq!(foo as *mut _, unsafe { &mut FOO } as *mut _);
+/// assert_eq!(foo as *mut _, &raw mut FOO);
 /// ```
 #[macro_export]
 macro_rules! xref_mut {

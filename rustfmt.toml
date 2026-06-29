@@ -1,0 +1,7 @@
+disable_all_formatting = true
+hard_tabs = true
+max_width = 10000
+newline_style = "Native"
+reorder_imports = false
+reorder_modules = true
+use_small_heuristics = "Max"

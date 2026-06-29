@@ -1,0 +1,45 @@
+name: Gate
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+          - beta
+          - nightly
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v7
+
+      - name: Install toolchain
+        run: rustup toolchain install ${{ matrix.rust }} --profile minimal
+
+      - name: Quick check
+        run: cargo +${{ matrix.rust }} check --all-targets
+
+      - name: Run tests
+        run: cargo +${{ matrix.rust }} test
+
+      - name: Install Miri
+        if: matrix.rust == 'nightly'
+        run: rustup component add miri --toolchain nightly
+
+      - name: Run Miri tests
+        if: matrix.rust == 'nightly'
+        run: cargo +nightly miri test
+
+      # Release mode exercises optimized code and not(debug_assertions) paths.
+      - name: Run tests (Release)
+        run: cargo +${{ matrix.rust }} test --release

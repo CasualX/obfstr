@@ -4,7 +4,7 @@ String Obfuscation
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![crates.io](https://img.shields.io/crates/v/obfstr.svg)](https://crates.io/crates/obfstr)
 [![docs.rs](https://docs.rs/obfstr/badge.svg)](https://docs.rs/obfstr)
-[![Build status](https://github.com/CasualX/obfstr/workflows/CI/badge.svg)](https://github.com/CasualX/obfstr/actions)
+[![Build status](https://github.com/CasualX/obfstr/actions/workflows/gate.yml/badge.svg)](https://github.com/CasualX/obfstr/actions/workflows/gate.yml)
 
 Compiletime string constant obfuscation for Rust.
 
@@ -12,7 +12,7 @@ The string constant itself is embedded in obfuscated form and deobfuscated local
 This reference to a temporary value must be used in the same statement it was generated.
 See the documentation for more advanced use cases.
 
-Looking for obfuscating formatting strings? See `fmtools` ([github](https://github.com/CasualX/fmtools), [crates.io](https://crates.io/crates/fmtools), [docs.rs](https://docs.rs/fmtools/0.1.2/fmtools/)) with the optional dependency `obfstr` enabled to automatically apply string obfuscation to formatting strings.
+Looking for obfuscating formatting strings? See `fmtools` ([github](https://github.com/CasualX/fmtools), [crates.io](https://crates.io/crates/fmtools), [docs.rs](https://docs.rs/fmtools/latest/fmtools/)) with the optional dependency `obfstr` enabled to automatically apply string obfuscation to formatting strings.
 
 Examples
 --------
