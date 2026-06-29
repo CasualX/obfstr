@@ -48,18 +48,19 @@ const fn obfchoice(v: u32, seed: u64) -> u32 {
 
 #[inline(always)]
 const fn obfuscate<const SEED: u64>(mut v: u32) -> usize {
-	let mut seed = SEED;
-	use crate::splitmix;
-	seed = splitmix(seed);
-	v = obfchoice(v, seed);
-	seed = splitmix(seed);
-	v = obfchoice(v, seed);
-	seed = splitmix(seed);
-	v = obfchoice(v, seed);
-	seed = splitmix(seed);
-	v = obfchoice(v, seed);
-	seed = splitmix(seed);
-	v = obfchoice(v, seed);
+	use crate::{splitmix, obfstmt};
+	let seed1 = splitmix(SEED);
+	let seed2 = splitmix(seed1);
+	let seed3 = splitmix(seed2);
+	let seed4 = splitmix(seed3);
+	let seed5 = splitmix(seed4);
+	obfstmt! {
+		v = obfchoice(v, seed1);
+		v = obfchoice(v, seed2);
+		v = obfchoice(v, seed3);
+		v = obfchoice(v, seed4);
+		v = obfchoice(v, seed5);
+	}
 	return (v & 0xffff) as usize
 }
 

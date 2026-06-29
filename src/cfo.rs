@@ -3,18 +3,46 @@ Control Flow Obfuscation
 ========================
 */
 
-/// Generates the keys and xor values for a sequence of statements.
-pub const fn generate<const LEN: usize>(mut key: u32, mut xor: u32, stmts: &[&'static str; LEN]) -> [(&'static str, u32, u32); LEN] {
-	let mut result = [("", 0, 0); LEN];
+#[inline(always)]
+const fn mix32(mut value: u32) -> u32 {
+	value ^= value >> 16;
+	value = value.wrapping_mul(0x7feb352d);
+	value ^= value >> 15;
+	value = value.wrapping_mul(0x846ca68b);
+	value ^= value >> 16;
+	return value;
+}
+
+/// Generates a collision-free key table for a sequence of statements.
+///
+/// The returned table contains one key per statement plus the final exit key.
+/// The odd-increment sequence is full-period over `u32`, and the mixer is
+/// bijective, so keys do not repeat until the 32-bit period wraps.
+#[inline(always)]
+pub const fn generate<const LEN: usize>(seed: u32, stmts: &[&'static str]) -> [u32; LEN] {
+	if LEN == 0 || LEN - 1 != stmts.len() {
+		panic!("invalid control flow key table length");
+	}
+
+	let mut digest = seed ^ (LEN as u32).wrapping_mul(0x9e3779b9);
 	let mut i = 0;
 	while i < stmts.len() {
-		key ^= xor;
-		xor = crate::murmur3(stmts[i].as_bytes(), key);
-		// FIXME! This should check for collisions...
-		result[i] = (stmts[i], key, xor);
+		digest = crate::murmur3(stmts[i].as_bytes(), digest ^ (i as u32).wrapping_mul(0x85ebca6b));
+		digest ^= (stmts[i].len() as u32).rotate_left((i & 31) as u32);
 		i += 1;
 	}
-	result
+
+	let increment = mix32(digest ^ 0x9e3779b9) | 1;
+	let mut state = mix32(seed ^ digest ^ 0x85ebca6b);
+
+	let mut keys = [0; LEN];
+	let mut i = 0;
+	while i < LEN {
+		state = state.wrapping_add(increment);
+		keys[i] = mix32(state ^ digest);
+		i += 1;
+	}
+	return keys;
 }
 
 /// Statement control flow obfuscation.
@@ -25,9 +53,6 @@ pub const fn generate<const LEN: usize>(mut key: u32, mut xor: u32, stmts: &[&'s
 ///
 /// Variables cannot be declared inside the obfuscated statements, declare and initialize any variables needed beforehand.
 /// Control flow analysis will fail. The declared variables will need to be mutable and have an initial value.
-///
-/// There's a risk that the obfuscated code fails to work due to two statements generating the same random key accidentally.
-/// This is presented at runtime with an infinite loop pending extra validation checks.
 ///
 /// # Examples
 ///
@@ -45,20 +70,18 @@ pub const fn generate<const LEN: usize>(mut key: u32, mut xor: u32, stmts: &[&'s
 #[macro_export]
 macro_rules! obfstmt {
 	($($stmt:stmt;)*) => {{
-		// Initial KEY and XOR values
-		const _OBFSTMT_KEY: u32 = $crate::random!(u32, stringify!($($stmt;)*));
-		const _OBFSTMT_XOR: u32 = $crate::murmur3(b"XOR", _OBFSTMT_KEY);
+		// Initial seed value
+		const _OBFSTMT_SEED: u32 = $crate::random!(u32, stringify!($($stmt;)*));
 		// Count the number of statements
 		const _OBFSTMT_LEN: usize = <[&'static str]>::len(&[$(stringify!($stmt)),*]);
-		// Generate key and xor values of every statement and the final exit code
-		const _OBFSTMT_STMTS: [(&'static str, u32, u32); _OBFSTMT_LEN] =
-			$crate::cfo::generate::<{_OBFSTMT_LEN}>(_OBFSTMT_KEY, _OBFSTMT_XOR, &[$(stringify!($stmt)),*]);
-		const _OBFSTMT_EXIT: u32 = if _OBFSTMT_LEN == 0 { _OBFSTMT_KEY ^ _OBFSTMT_XOR }
-			else { _OBFSTMT_STMTS[_OBFSTMT_LEN - 1].1 ^ _OBFSTMT_STMTS[_OBFSTMT_LEN - 1].2 };
-		// Initialize the key and xor values
-		let mut key = _OBFSTMT_KEY;
+		// Generate one key for every statement and one final exit key
+		const _OBFSTMT_KEY_LEN: usize = _OBFSTMT_LEN + 1;
+		const _OBFSTMT_KEYS: [u32; _OBFSTMT_KEY_LEN] =
+			$crate::cfo::generate::<_OBFSTMT_KEY_LEN>(_OBFSTMT_SEED, &[$(stringify!($stmt)),*]);
+		// Initialize the key value
+		let mut key = _OBFSTMT_KEYS[0];
 		#[allow(unused_mut)]
-		let mut xor = _OBFSTMT_XOR;
+		let mut xor = 0u32;
 		loop {
 			$crate::__obfstmt_match!(key, xor, 0usize, [$($stmt;)*], []);
 			key ^= xor;
@@ -76,12 +99,12 @@ macro_rules! __obfstmt_match {
 			// Have to use match guard here because an expression isn't allowed in pattern position
 			// The result is still optimized to a binary search for the right key per block
 			$(
-				key if key == { _OBFSTMT_STMTS[$i].1 } => {
+				key if key == { _OBFSTMT_KEYS[$i] } => {
 					$stmt
-					$xor = _OBFSTMT_STMTS[$i].2;
+					$xor = _OBFSTMT_KEYS[$i] ^ _OBFSTMT_KEYS[$i + 1usize];
 				},
 			)*
-			_OBFSTMT_EXIT => break,
+			key if key == { _OBFSTMT_KEYS[_OBFSTMT_LEN] } => break,
 			_ => (),
 		}
 	};
@@ -102,4 +125,31 @@ fn test_identical_stmt() {
 	}
 	obfstmt! {}
 	assert_eq!(i, 4);
+}
+
+#[test]
+fn test_generate_known_collision_is_unique() {
+	const STMT_LEN: usize = 34289;
+	const KEY_LEN: usize = STMT_LEN + 1;
+
+	let keys = generate::<KEY_LEN>(0x12345678, &["i += 1"; STMT_LEN]);
+	assert_ne!(keys[9681], keys[34288]);
+	assert_ne!(keys[34288], keys[KEY_LEN - 1]);
+}
+
+#[test]
+fn test_generate_unique_keys() {
+	const STMT_LEN: usize = 512;
+	const KEY_LEN: usize = STMT_LEN + 1;
+
+	let keys = generate::<KEY_LEN>(0x12345678, &["i += 1"; STMT_LEN]);
+	let mut i = 0;
+	while i < KEY_LEN {
+		let mut j = i + 1;
+		while j < KEY_LEN {
+			assert_ne!(keys[i], keys[j]);
+			j += 1;
+		}
+		i += 1;
+	}
 }
