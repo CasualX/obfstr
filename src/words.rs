@@ -83,7 +83,7 @@ pub const fn obfuscate<const LEN: usize>(s: &[u16], k: &[u16; LEN]) -> [u16; LEN
 	let mut data = [0u16; LEN];
 	let mut i = 0usize;
 	while i < LEN {
-		data[i] = s[i] ^ k[i];
+		data[i] = encode!(u16, s[i], k[i]);
 		i += 1;
 	}
 	return data;
@@ -106,10 +106,10 @@ pub fn deobfuscate<const LEN: usize>(s: &[u16; LEN], k: &[u16; LEN]) -> [u16; LE
 		while i < LEN & !3 {
 			let ct = read_volatile(src.offset(i as isize) as *const [u16; 4]);
 			let tmp = [
-				ct[0] ^ k[i + 0],
-				ct[1] ^ k[i + 1],
-				ct[2] ^ k[i + 2],
-				ct[3] ^ k[i + 3],
+				decode!(u16, ct[0], k[i + 0]),
+				decode!(u16, ct[1], k[i + 1]),
+				decode!(u16, ct[2], k[i + 2]),
+				decode!(u16, ct[3], k[i + 3]),
 			];
 			write(dest.offset(i as isize) as *mut [u16; 4], tmp);
 			i += 4;
@@ -118,8 +118,8 @@ pub fn deobfuscate<const LEN: usize>(s: &[u16; LEN], k: &[u16; LEN]) -> [u16; LE
 		while i < LEN & !1 {
 			let ct = read_volatile(src.offset(i as isize) as *const [u16; 2]);
 			let tmp = [
-				ct[0] ^ k[i + 0],
-				ct[1] ^ k[i + 1],
+				decode!(u16, ct[0], k[i + 0]),
+				decode!(u16, ct[1], k[i + 1]),
 			];
 			write(dest.offset(i as isize) as *mut [u16; 2], tmp);
 			i += 2;
@@ -127,7 +127,7 @@ pub fn deobfuscate<const LEN: usize>(s: &[u16; LEN], k: &[u16; LEN]) -> [u16; LE
 		// Process the remaining bytes
 		if LEN % 2 != 0 {
 			let ct = read_volatile(src.offset(i as isize));
-			write(dest.offset(i as isize), ct ^ k[i]);
+			write(dest.offset(i as isize), decode!(u16, ct, k[i]));
 		}
 	}
 	return buf;

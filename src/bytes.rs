@@ -5,6 +5,9 @@ Byte string obfuscation
 
 use core::ptr::{read_volatile, write};
 
+#[repr(align(8))]
+pub struct Obfuscated<const LEN: usize>(pub [u8; LEN]);
+
 /// Compiletime string constant obfuscation.
 ///
 /// The purpose of the obfuscation is to make it difficult to discover the original strings with automated analysis.
@@ -135,7 +138,7 @@ macro_rules! __obfbytes {
 		const _OBFBYTES_STRING: &[u8] = $s;
 		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
 		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($s)));
-		static _OBFBYTES_SDATA: [u8; _OBFBYTES_LEN] = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
+		static _OBFBYTES_SDATA: $crate::bytes::Obfuscated<_OBFBYTES_LEN> = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
 		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
 			$crate::xref::xref::<_,
 				{$crate::random!(u32, "offset", stringify!($s))},
@@ -194,77 +197,122 @@ pub const fn keystream<const LEN: usize>(key: u32) -> [u8; LEN] {
 
 /// Obfuscates the input string and given key stream.
 #[inline(always)]
-pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> [u8; LEN] {
+pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> Obfuscated<LEN> {
 	if s.len() != LEN {
 		panic!("input string len not equal to key stream len");
 	}
 	let mut data = [0u8; LEN];
 	let mut i = 0usize;
-	while i < LEN {
-		data[i] = s[i] ^ k[i];
-		i += 1;
+	#[cfg(target_pointer_width = "64")]
+	while i < LEN & !7 {
+		let ct = encode!(u64,
+			u64::from_ne_bytes([s[i + 0], s[i + 1], s[i + 2], s[i + 3], s[i + 4], s[i + 5], s[i + 6], s[i + 7]]),
+			u64::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3], k[i + 4], k[i + 5], k[i + 6], k[i + 7]]));
+		let ct = ct.to_ne_bytes();
+		data[i + 0] = ct[0];
+		data[i + 1] = ct[1];
+		data[i + 2] = ct[2];
+		data[i + 3] = ct[3];
+		data[i + 4] = ct[4];
+		data[i + 5] = ct[5];
+		data[i + 6] = ct[6];
+		data[i + 7] = ct[7];
+		i += 8;
 	}
-	return data;
+	while i < LEN & !3 {
+		let ct = encode!(u32,
+			u32::from_ne_bytes([s[i + 0], s[i + 1], s[i + 2], s[i + 3]]),
+			u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3]]));
+		let ct = ct.to_ne_bytes();
+		data[i + 0] = ct[0];
+		data[i + 1] = ct[1];
+		data[i + 2] = ct[2];
+		data[i + 3] = ct[3];
+		i += 4;
+	}
+	match LEN % 4 {
+		1 => {
+			data[i] = encode!(u8, s[i], k[i]);
+		},
+		2 => {
+			let ct = encode!(u16,
+				u16::from_ne_bytes([s[i + 0], s[i + 1]]),
+				u16::from_ne_bytes([k[i + 0], k[i + 1]]));
+			let ct = ct.to_ne_bytes();
+			data[i + 0] = ct[0];
+			data[i + 1] = ct[1];
+		},
+		3 => {
+			let ct = encode!(u16,
+				u16::from_ne_bytes([s[i + 0], s[i + 1]]),
+				u16::from_ne_bytes([k[i + 0], k[i + 1]]));
+			let ct = ct.to_ne_bytes();
+			data[i + 0] = ct[0];
+			data[i + 1] = ct[1];
+			data[i + 2] = encode!(u8, s[i + 2], k[i + 2]);
+		},
+		_ => (),
+	}
+	return Obfuscated(data);
 }
 
 /// Deobfuscates the obfuscated input string and given key stream.
 #[inline(always)]
-pub fn deobfuscate<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN]) -> [u8; LEN] {
-	let mut buf = [0u8; LEN];
+pub fn deobfuscate<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN]) -> [u8; LEN] {
+	let mut buf = Obfuscated([0u8; LEN]);
 	let mut i = 0;
 	// Try to tickle the LLVM optimizer in _just_ the right way
 	// Use `read_volatile` to avoid constant folding a specific read and optimize the rest
 	// Volatile reads of any size larger than 8 bytes appears to cause a bunch of one byte reads
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
-		let src = s.as_ptr();
-		let dest = buf.as_mut_ptr();
+		let src = s.0.as_ptr();
+		let dest = buf.0.as_mut_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !7 {
-			let ct = read_volatile(src.offset(i as isize) as *const [u8; 8]);
-			let tmp = u64::from_ne_bytes([ct[0], ct[1], ct[2], ct[3], ct[4], ct[5], ct[6], ct[7]]) ^
-				u64::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3], k[i + 4], k[i + 5], k[i + 6], k[i + 7]]);
-			write(dest.offset(i as isize) as *mut [u8; 8], tmp.to_ne_bytes());
+			let ct = read_volatile(src.offset(i as isize) as *const u64);
+			let tmp = decode!(u64, ct,
+				u64::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3], k[i + 4], k[i + 5], k[i + 6], k[i + 7]]));
+			write(dest.offset(i as isize) as *mut u64, tmp);
 			i += 8;
 		}
 		// Process in chunks of 4 bytes
 		while i < LEN & !3 {
-			let ct = read_volatile(src.offset(i as isize) as *const [u8; 4]);
-			let tmp = u32::from_ne_bytes([ct[0], ct[1], ct[2], ct[3]]) ^
-				u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3]]);
-			write(dest.offset(i as isize) as *mut [u8; 4], tmp.to_ne_bytes());
+			let ct = read_volatile(src.offset(i as isize) as *const u32);
+			let tmp = decode!(u32, ct,
+				u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3]]));
+			write(dest.offset(i as isize) as *mut u32, tmp);
 			i += 4;
 		}
 		// Process the remaining bytes
 		match LEN % 4 {
 			1 => {
 				let ct = read_volatile(src.offset(i as isize));
-				write(dest.offset(i as isize), ct ^ k[i]);
+				write(dest.offset(i as isize), decode!(u8, ct, k[i]));
 			},
 			2 => {
-				let ct = read_volatile(src.offset(i as isize) as *const [u8; 2]);
-				write(dest.offset(i as isize) as *mut [u8; 2], [
-					ct[0] ^ k[i + 0],
-					ct[1] ^ k[i + 1],
-				]);
+				let ct = read_volatile(src.offset(i as isize) as *const u16);
+				let tmp = decode!(u16, ct,
+					u16::from_ne_bytes([k[i + 0], k[i + 1]]));
+				write(dest.offset(i as isize) as *mut u16, tmp);
 			},
 			3 => {
-				let ct = read_volatile(src.offset(i as isize) as *const [u8; 3]);
-				write(dest.offset(i as isize) as *mut [u8; 2], [
-					ct[0] ^ k[i + 0],
-					ct[1] ^ k[i + 1],
-				]);
-				write(dest.offset(i as isize + 2), ct[2] ^ k[i + 2]);
+				let ct = read_volatile(src.offset(i as isize) as *const u16);
+				let tmp = decode!(u16, ct,
+					u16::from_ne_bytes([k[i + 0], k[i + 1]]));
+				write(dest.offset(i as isize) as *mut u16, tmp);
+				let ct = read_volatile(src.offset(i as isize + 2));
+				write(dest.offset(i as isize + 2), decode!(u8, ct, k[i + 2]));
 			},
 			_ => (),
 		}
 	}
-	return buf;
+	return buf.0;
 }
 
 #[inline(always)]
-pub fn equals<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN], other: &[u8]) -> bool {
+pub fn equals<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN], other: &[u8]) -> bool {
 	if other.len() != LEN {
 		return false;
 	}
@@ -274,13 +322,13 @@ pub fn equals<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN], other: &[u8]) -> b
 	// Volatile reads of any size larger than 8 bytes appears to cause a bunch of one byte reads
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
-		let src = s.as_ptr();
+		let src = s.0.as_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !7 {
-			let ct = read_volatile(src.offset(i as isize) as *const [u8; 8]);
-			let tmp = u64::from_ne_bytes([ct[0], ct[1], ct[2], ct[3], ct[4], ct[5], ct[6], ct[7]]) ^
-				u64::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3], k[i + 4], k[i + 5], k[i + 6], k[i + 7]]);
+			let ct = read_volatile(src.offset(i as isize) as *const u64);
+			let tmp = decode!(u64, ct,
+				u64::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3], k[i + 4], k[i + 5], k[i + 6], k[i + 7]]));
 			let other = u64::from_ne_bytes([other[i + 0], other[i + 1], other[i + 2], other[i + 3], other[i + 4], other[i + 5], other[i + 6], other[i + 7]]);
 			if tmp != other {
 				return false;
@@ -289,9 +337,9 @@ pub fn equals<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN], other: &[u8]) -> b
 		}
 		// Process in chunks of 4 bytes
 		while i < LEN & !3 {
-			let ct = read_volatile(src.offset(i as isize) as *const [u8; 4]);
-			let tmp = u32::from_ne_bytes([ct[0], ct[1], ct[2], ct[3]]) ^
-				u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3]]);
+			let ct = read_volatile(src.offset(i as isize) as *const u32);
+			let tmp = decode!(u32, ct,
+				u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], k[i + 3]]));
 			let other = u32::from_ne_bytes([other[i + 0], other[i + 1], other[i + 2], other[i + 3]]);
 			if tmp != other {
 				return false;
@@ -302,15 +350,20 @@ pub fn equals<const LEN: usize>(s: &[u8; LEN], k: &[u8; LEN], other: &[u8]) -> b
 		match LEN % 4 {
 			1 => {
 				let ct = read_volatile(src.offset(i as isize));
-				ct ^ k[i] == other[i]
+				decode!(u8, ct, k[i]) == other[i]
 			},
 			2 => {
-				let ct = read_volatile(src.offset(i as isize) as *const [u8; 2]);
-				u16::from_ne_bytes([ct[0], ct[1]]) ^ u16::from_ne_bytes([k[i + 0], k[i + 1]]) == u16::from_ne_bytes([other[i + 0], other[i + 1]])
+				let ct = read_volatile(src.offset(i as isize) as *const u16);
+				decode!(u16, ct,
+					u16::from_ne_bytes([k[i + 0], k[i + 1]])) == u16::from_ne_bytes([other[i + 0], other[i + 1]])
 			},
 			3 => {
-				let ct = read_volatile(src.offset(i as isize) as *const [u8; 3]);
-				u32::from_ne_bytes([ct[0], ct[1], ct[2], 0]) ^ u32::from_ne_bytes([k[i + 0], k[i + 1], k[i + 2], 0]) == u32::from_ne_bytes([other[i + 0], other[i + 1], other[i + 2], 0])
+				let ct = read_volatile(src.offset(i as isize) as *const u16);
+				decode!(u16, ct,
+					u16::from_ne_bytes([k[i + 0], k[i + 1]])) == u16::from_ne_bytes([other[i + 0], other[i + 1]]) && {
+					let ct = read_volatile(src.offset(i as isize + 2));
+					decode!(u8, ct, k[i + 2]) == other[i + 2]
+				}
 			},
 			_ => true,
 		}
@@ -326,7 +379,7 @@ fn test_remaining_bytes() {
 		let data = obfuscate::<LEN>(&STRING[..LEN], &keys);
 		let buffer = deobfuscate::<LEN>(&data, &keys);
 		// Ciphertext should not equal input string
-		assert_ne!(&data[..], &STRING[..LEN]);
+		assert_ne!(&data.0[..], &STRING[..LEN]);
 		// Deobfuscated result should equal input string
 		assert_eq!(&buffer[..], &STRING[..LEN]);
 		// Specialized equals check should succeed
@@ -348,7 +401,7 @@ fn test_equals() {
 	const STRING: &str = "Hello ðŸŒ";
 	const LEN: usize = STRING.len();
 	const KEYSTREAM: [u8; LEN] = keystream::<LEN>(0x10203040);
-	const OBFSTRING: [u8; LEN] = obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
+	static OBFSTRING: Obfuscated<LEN> = obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
 	assert!(equals::<LEN>(&OBFSTRING, &KEYSTREAM, STRING.as_bytes()));
 }
 

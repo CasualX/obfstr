@@ -7,6 +7,20 @@ Compiletime string constant obfuscation.
 use core::str;
 use core::ffi::CStr;
 
+macro_rules! encode {
+	($ty:ty, $lhs:expr, $rhs:expr) => {
+		// $lhs ^ $rhs
+		<$ty>::wrapping_sub($lhs, $rhs)
+	};
+}
+
+macro_rules! decode {
+	($ty:ty, $lhs:expr, $rhs:expr) => {
+		// $lhs ^ $rhs
+		<$ty>::wrapping_add($lhs, $rhs)
+	};
+}
+
 #[doc(hidden)]
 pub mod wide;
 
