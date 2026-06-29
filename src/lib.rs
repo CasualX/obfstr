@@ -103,15 +103,17 @@ macro_rules! __random_cast {
 	(isize, $seed:expr) => { $seed as isize };
 	(bool, $seed:expr) => { $seed as i64 >= 0 };
 
-	// {f32, f64}::from_bits is unstable as const fn due to issues with NaN
-	(f32, $seed:expr) => { unsafe { ::core::mem::transmute::<u32, f32>(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) } };
-	(f64, $seed:expr) => { unsafe { ::core::mem::transmute::<u64, f64>(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) } };
+	(f32, $seed:expr) => { f32::from_bits(0b0_01111111 << (f32::MANTISSA_DIGITS - 1) | ($seed as u32 >> 9)) };
+	(f64, $seed:expr) => { f64::from_bits(0b0_01111111111 << (f64::MANTISSA_DIGITS - 1) | ($seed >> 12)) };
 
 	($ty:ident, $seed:expr) => { compile_error!(concat!("unsupported type: ", stringify!($ty))) };
 }
 
 #[test]
 fn test_random_f32() {
+	const CONST_RANDOM: f32 = random!(f32);
+	assert!(CONST_RANDOM >= 1.0 && CONST_RANDOM < 2.0, "{}", CONST_RANDOM);
+
 	#[track_caller]
 	fn t(v: f32) {
 		assert!(v >= 1.0 && v < 2.0, "{}", v);
@@ -125,6 +127,9 @@ fn test_random_f32() {
 
 #[test]
 fn test_random_f64() {
+	const CONST_RANDOM: f64 = random!(f64);
+	assert!(CONST_RANDOM >= 1.0 && CONST_RANDOM < 2.0, "{}", CONST_RANDOM);
+
 	#[track_caller]
 	fn t(v: f64) {
 		assert!(v >= 1.0 && v < 2.0, "{}", v);
