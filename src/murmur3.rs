@@ -8,8 +8,8 @@ use core::slice;
 #[doc(hidden)]
 #[macro_export]
 macro_rules! murmur3 {
-	($s:expr, $seed:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, $seed); _MURMUR3_HASH }};
-	($s:expr) => {{ const _MURMUR3_HASH: u32 = $crate::murmur3($s, 0); _MURMUR3_HASH }};
+	($s:expr, $seed:expr) => { const { $crate::murmur3($s, $seed) } };
+	($s:expr) => { const { $crate::murmur3($s, 0) } };
 }
 
 /// MurmurHash3 (32-bit variant) keyed hash function.
