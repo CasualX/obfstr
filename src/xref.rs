@@ -54,7 +54,9 @@ const fn obfuscate<const SEED: u64>(mut v: u32) -> usize {
 	let seed3 = splitmix(seed2);
 	let seed4 = splitmix(seed3);
 	let seed5 = splitmix(seed4);
+	// Derive the control flow seed from the xref seed
 	obfstmt! {
+		@seed (SEED ^ (SEED >> 32)) as u32;
 		v = obfchoice(v, seed1);
 		v = obfchoice(v, seed2);
 		v = obfchoice(v, seed3);
@@ -74,8 +76,9 @@ fn inner<const SEED: u64>(p: *const u8, offset: u32) -> *const u8 {
 pub fn xref<T: ?Sized, const OFFSET: u32, const SEED: u64>(p: &'static T) -> &'static T {
 	unsafe {
 		let mut p: *const T = p;
+		// Force compiletime evaluation so the reference uses an offset relocation addend
 		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
-		let val = inner::<SEED>(hint::black_box((p as *const u8).wrapping_sub(obfuscate::<SEED>(OFFSET))), hint::black_box(OFFSET));
+		let val = inner::<SEED>(hint::black_box((p as *const u8).wrapping_sub(const { obfuscate::<SEED>(OFFSET) })), hint::black_box(OFFSET));
 		// set_ptr_value
 		*(&mut p as *mut *const T as *mut *const u8) = val;
 		&*p
@@ -110,8 +113,9 @@ fn inner_mut<const SEED: u64>(p: *mut u8, offset: u32) -> *mut u8 {
 pub fn xref_mut<T: ?Sized, const OFFSET: u32, const SEED: u64>(p: &'static mut T) -> &'static mut T {
 	unsafe {
 		let mut p: *mut T = p;
+		// Force compiletime evaluation so the reference uses an offset relocation addend
 		// Launder the values through black_box to prevent LLVM from optimizing away the obfuscation
-		let val = inner_mut::<SEED>(hint::black_box((p as *mut u8).wrapping_sub(obfuscate::<SEED>(OFFSET))), hint::black_box(OFFSET));
+		let val = inner_mut::<SEED>(hint::black_box((p as *mut u8).wrapping_sub(const { obfuscate::<SEED>(OFFSET) })), hint::black_box(OFFSET));
 		// set_ptr_value
 		*(&mut p as *mut *mut T as *mut *mut u8) = val;
 		&mut *p
