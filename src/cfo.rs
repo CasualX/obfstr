@@ -67,51 +67,58 @@ pub const fn generate<const LEN: usize>(seed: u32, stmts: &[&'static str]) -> [u
 ///# obfstr::obfstmt! {}
 /// assert_eq!(tmp, 10);
 /// ```
+///
+/// An explicit constant `u32` seed can be provided when otherwise-identical macro invocations
+/// need different control flow. The seed is mixed with the stringified statements:
+///
+/// ```
+/// let mut tmp = 0;
+/// obfstr::obfstmt! {
+/// 	@seed obfstr::random!(u32, "example");
+/// 	tmp = 2;
+/// 	tmp *= 5;
+/// }
+/// assert_eq!(tmp, 10);
+/// ```
 #[macro_export]
 macro_rules! obfstmt {
-	($($stmt:stmt;)*) => {{
-		// Initial seed value
-		const _OBFSTMT_SEED: u32 = $crate::random!(u32, stringify!($($stmt;)*));
+	(@seed $seed:expr; $($stmt:stmt;)*) => {{
 		// Count the number of statements
 		const _OBFSTMT_LEN: usize = <[&'static str]>::len(&[$(stringify!($stmt)),*]);
 		// Generate one key for every statement and one final exit key
 		const _OBFSTMT_KEY_LEN: usize = _OBFSTMT_LEN + 1;
-		const _OBFSTMT_KEYS: [u32; _OBFSTMT_KEY_LEN] =
-			$crate::cfo::generate::<_OBFSTMT_KEY_LEN>(_OBFSTMT_SEED, &[$(stringify!($stmt)),*]);
+		// Seed might be a generic const (from xref obfuscate) which is not allowed in inner const item...
+		let _obfstmt_keys: [u32; _OBFSTMT_KEY_LEN] = const {
+			$crate::cfo::generate::<_OBFSTMT_KEY_LEN>($seed, &[$(stringify!($stmt)),*])
+		};
 		// Initialize the key value
-		let mut key = _OBFSTMT_KEYS[0];
+		let mut key = _obfstmt_keys[0];
 		#[allow(unused_mut)]
 		let mut xor = 0u32;
 		loop {
-			$crate::__obfstmt_match!(key, xor, 0usize, [$($stmt;)*], []);
+			#[allow(unused_mut)]
+			let mut index = 0usize;
+			match key {
+				$(
+					// Guards are evaluated in source order, so each arm consumes one key
+					key if key == {
+						let expected = _obfstmt_keys[index];
+						index += 1;
+						expected
+					} => {
+						$stmt
+						xor = _obfstmt_keys[index - 1] ^ _obfstmt_keys[index];
+					},
+				)*
+				key if key == { _obfstmt_keys[index] } => break,
+				_ => (),
+			}
 			key ^= xor;
 		}
 	}};
-}
-
-/// Generates the match statement for [`obfstmt!`].
-#[doc(hidden)]
-#[macro_export]
-macro_rules! __obfstmt_match {
-	// Terminating case, generate the code
-	($key:expr, $xor:expr, $x:expr, [], [$($i:expr, $stmt:stmt;)*]) => {
-		match $key {
-			// Have to use match guard here because an expression isn't allowed in pattern position
-			// The result is still optimized to a binary search for the right key per block
-			$(
-				key if key == { _OBFSTMT_KEYS[$i] } => {
-					$stmt
-					$xor = _OBFSTMT_KEYS[$i] ^ _OBFSTMT_KEYS[$i + 1usize];
-				},
-			)*
-			key if key == { _OBFSTMT_KEYS[_OBFSTMT_LEN] } => break,
-			_ => (),
-		}
-	};
-	// Generate increasing indices for every stmt
-	($key:expr, $xor:expr, $x:expr, [$stmt1:stmt; $($tail:stmt;)*], [$($i:expr, $stmt2:stmt;)*]) => {
-		$crate::__obfstmt_match!($key, $xor, $x + 1usize, [$($tail;)*], [$($i, $stmt2;)* $x, $stmt1; ])
-	};
+	($($stmt:stmt;)*) => {{
+		$crate::obfstmt!(@seed $crate::entropy("obfstmt") as u32; $($stmt;)*)
+	}};
 }
 
 #[test]
@@ -152,4 +159,14 @@ fn test_generate_unique_keys() {
 		}
 		i += 1;
 	}
+}
+
+#[test]
+fn test_generate_seed_and_statements_change_keys() {
+	let stmts = &["i += 1", "i *= 2", "i -= 3"];
+	let lhs = generate::<4>(0x12345678, stmts);
+	let rhs = generate::<4>(0x87654321, stmts);
+	let different_stmts = generate::<4>(0x12345678, &["i += 1", "i *= 2", "i -= 4"]);
+	assert_ne!(lhs, rhs);
+	assert_ne!(lhs, different_stmts);
 }
