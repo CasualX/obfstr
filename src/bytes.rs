@@ -5,8 +5,11 @@ Byte string obfuscation
 
 use core::ptr::{read_volatile, write};
 
-#[repr(align(8))]
-pub struct Obfuscated<const LEN: usize>(pub [u8; LEN]);
+#[repr(C, align(8))]
+pub struct Obfuscated<const LEN: usize, const PAD_LEN: usize> {
+	pub data: [u8; LEN],
+	pub padding: [u8; PAD_LEN],
+}
 
 /// Compiletime string constant obfuscation.
 ///
@@ -137,15 +140,23 @@ macro_rules! __obfbytes {
 		use ::core::primitive::*;
 		const _OBFBYTES_STRING: &[u8] = $s;
 		const _OBFBYTES_LEN: usize = _OBFBYTES_STRING.len();
+		const _OBFBYTES_PAD_LEN: usize = $crate::bytes::padding_len(_OBFBYTES_LEN);
+		const _OBFBYTES_PADDING: [u8; _OBFBYTES_PAD_LEN] = $crate::bytes::keystream::<_OBFBYTES_PAD_LEN>($crate::random!(u32, "padding", stringify!($s)));
 		const _OBFBYTES_KEYSTREAM: [u8; _OBFBYTES_LEN] = $crate::bytes::keystream::<_OBFBYTES_LEN>($crate::random!(u32, "key", stringify!($s)));
-		static _OBFBYTES_SDATA: $crate::bytes::Obfuscated<_OBFBYTES_LEN> = $crate::bytes::obfuscate::<_OBFBYTES_LEN>(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM);
-		$crate::bytes::deobfuscate::<_OBFBYTES_LEN>(
+		static _OBFBYTES_SDATA: $crate::bytes::Obfuscated<_OBFBYTES_LEN, _OBFBYTES_PAD_LEN> = $crate::bytes::obfuscate(_OBFBYTES_STRING, &_OBFBYTES_KEYSTREAM, _OBFBYTES_PADDING);
+		$crate::bytes::deobfuscate(
 			$crate::xref::xref::<_,
 				{$crate::random!(u32, "offset", stringify!($s))},
 				{$crate::random!(u64, "xref", stringify!($s))}>
 				(&_OBFBYTES_SDATA),
 			&_OBFBYTES_KEYSTREAM)
 	}};
+}
+
+/// Returns the padding required for an 8-byte aligned obfuscated byte string.
+#[inline(always)]
+pub const fn padding_len(len: usize) -> usize {
+	return (8 - len % 8) % 8
 }
 
 // Simple XorShift to generate the key stream.
@@ -197,7 +208,7 @@ pub const fn keystream<const LEN: usize>(key: u32) -> [u8; LEN] {
 
 /// Obfuscates the input string and given key stream.
 #[inline(always)]
-pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> Obfuscated<LEN> {
+pub const fn obfuscate<const LEN: usize, const PAD_LEN: usize>(s: &[u8], k: &[u8; LEN], padding: [u8; PAD_LEN]) -> Obfuscated<LEN, PAD_LEN> {
 	if s.len() != LEN {
 		panic!("input string len not equal to key stream len");
 	}
@@ -253,21 +264,21 @@ pub const fn obfuscate<const LEN: usize>(s: &[u8], k: &[u8; LEN]) -> Obfuscated<
 		},
 		_ => (),
 	}
-	return Obfuscated(data);
+	return Obfuscated { data, padding };
 }
 
 /// Deobfuscates the obfuscated input string and given key stream.
 #[inline(always)]
-pub fn deobfuscate<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN]) -> [u8; LEN] {
-	let mut buf = Obfuscated([0u8; LEN]);
+pub fn deobfuscate<const LEN: usize, const PAD_LEN: usize>(s: &Obfuscated<LEN, PAD_LEN>, k: &[u8; LEN]) -> [u8; LEN] {
+	let mut buf = Obfuscated { data: [0u8; LEN], padding: [0u8; PAD_LEN] };
 	let mut i = 0;
 	// Try to tickle the LLVM optimizer in _just_ the right way
 	// Use `read_volatile` to avoid constant folding a specific read and optimize the rest
 	// Volatile reads of any size larger than 8 bytes appears to cause a bunch of one byte reads
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
-		let src = s.0.as_ptr();
-		let dest = buf.0.as_mut_ptr();
+		let src = s.data.as_ptr();
+		let dest = buf.data.as_mut_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !7 {
@@ -308,11 +319,11 @@ pub fn deobfuscate<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN]) -> [u8;
 			_ => (),
 		}
 	}
-	return buf.0;
+	return buf.data;
 }
 
 #[inline(always)]
-pub fn equals<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN], other: &[u8]) -> bool {
+pub fn equals<const LEN: usize, const PAD_LEN: usize>(s: &Obfuscated<LEN, PAD_LEN>, k: &[u8; LEN], other: &[u8]) -> bool {
 	if other.len() != LEN {
 		return false;
 	}
@@ -322,7 +333,7 @@ pub fn equals<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN], other: &[u8]
 	// Volatile reads of any size larger than 8 bytes appears to cause a bunch of one byte reads
 	// Hand optimize in chunks of 8 and 4 bytes to avoid this
 	unsafe {
-		let src = s.0.as_ptr();
+		let src = s.data.as_ptr();
 		// Process in chunks of 8 bytes on 64-bit targets
 		#[cfg(target_pointer_width = "64")]
 		while i < LEN & !7 {
@@ -374,35 +385,53 @@ pub fn equals<const LEN: usize>(s: &Obfuscated<LEN>, k: &[u8; LEN], other: &[u8]
 #[test]
 fn test_remaining_bytes() {
 	const STRING: &[u8] = b"01234567ABCDEFGHI";
-	fn test<const LEN: usize>(key: u32) {
+	fn test<const LEN: usize, const PAD_LEN: usize>(key: u32) {
 		let keys = keystream::<LEN>(key);
-		let data = obfuscate::<LEN>(&STRING[..LEN], &keys);
-		let buffer = deobfuscate::<LEN>(&data, &keys);
+		let data = obfuscate(&STRING[..LEN], &keys, keystream::<PAD_LEN>(key ^ 0xA5A5A5A5));
+		let buffer = deobfuscate(&data, &keys);
+		assert_eq!(core::mem::size_of_val(&data), LEN + PAD_LEN);
 		// Ciphertext should not equal input string
-		assert_ne!(&data.0[..], &STRING[..LEN]);
+		assert_ne!(&data.data[..], &STRING[..LEN]);
 		// Deobfuscated result should equal input string
 		assert_eq!(&buffer[..], &STRING[..LEN]);
 		// Specialized equals check should succeed
-		assert!(equals::<LEN>(&data, &keys, &STRING[..LEN]));
+		assert!(equals(&data, &keys, &STRING[..LEN]));
 	}
-	test::<8>(0x1111);
-	test::<9>(0x2222);
-	test::<10>(0x3333);
-	test::<11>(0x4444);
-	test::<12>(0x5555);
-	test::<13>(0x6666);
-	test::<14>(0x7777);
-	test::<15>(0x8888);
-	test::<16>(0x9999);
+	test::<8, 0>(0x1111);
+	test::<9, 7>(0x2222);
+	test::<10, 6>(0x3333);
+	test::<11, 5>(0x4444);
+	test::<12, 4>(0x5555);
+	test::<13, 3>(0x6666);
+	test::<14, 2>(0x7777);
+	test::<15, 1>(0x8888);
+	test::<16, 0>(0x9999);
+}
+
+#[test]
+fn test_padded_storage() {
+	const LEN: usize = 9;
+	const PAD_LEN: usize = 7;
+	const PADDING_KEY: u32 = 0x10203040;
+	let keys = keystream::<LEN>(0x12345678);
+	let data = obfuscate(&[0; LEN], &keys, keystream::<PAD_LEN>(PADDING_KEY));
+
+	assert_eq!(padding_len(LEN), PAD_LEN);
+	assert_eq!(core::mem::size_of_val(&data), LEN + PAD_LEN);
+	assert_eq!(core::mem::align_of_val(&data), 8);
+	assert_eq!(data.padding, keystream::<PAD_LEN>(PADDING_KEY));
+	assert_ne!(&data.padding[..], &keys[..PAD_LEN]);
+	assert!(data.padding.iter().all(|&byte| byte != 0));
 }
 
 #[test]
 fn test_equals() {
 	const STRING: &str = "Hello ðŸŒ";
 	const LEN: usize = STRING.len();
+	const PAD_LEN: usize = padding_len(LEN);
 	const KEYSTREAM: [u8; LEN] = keystream::<LEN>(0x10203040);
-	static OBFSTRING: Obfuscated<LEN> = obfuscate::<LEN>(STRING.as_bytes(), &KEYSTREAM);
-	assert!(equals::<LEN>(&OBFSTRING, &KEYSTREAM, STRING.as_bytes()));
+	static OBFSTRING: Obfuscated<LEN, PAD_LEN> = obfuscate(STRING.as_bytes(), &KEYSTREAM, keystream::<PAD_LEN>(0x50607080));
+	assert!(equals(&OBFSTRING, &KEYSTREAM, STRING.as_bytes()));
 }
 
 #[test]
