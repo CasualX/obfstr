@@ -40,8 +40,9 @@ fn obfstr() {
 
 #[inline(never)]
 fn xref() -> &'static i32 {
-	static FOO: i32 = 3141592;
-	obfstr::xref!(&FOO)
+	static XREF_ADDEND_TARGET: i32 = 3141592;
+	// Fixed generics keep the addend deterministic for the codegen regression test.
+	obfstr::xref::xref::<_, 0xD22D8787, 0x2CA5A9509425F502>(&XREF_ADDEND_TARGET)
 }
 
 fn main() {
